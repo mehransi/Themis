@@ -7,7 +7,10 @@ RUN pip install pillow==10.3.0
 RUN pip install torch==2.3.0 torchvision==0.18.0 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install ultralytics==8.2.10
 RUN pip install aiohttp==3.9.5
+RUN pip install opencv-python-headless
+RUN pip install gitpython==3.1.43
 
+COPY yolov5s.pt yolov5s.pt
 COPY detector.py detector.py
 
 ENTRYPOINT ["python", "detector.py"]
