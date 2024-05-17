@@ -1,13 +1,15 @@
+import asyncio
 import base64
 import io
 import json
 import numpy as np
 import os
+import time
 import torch
 
 from PIL import Image
 from torchvision.models import resnet50, ResNet50_Weights
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
 from PIL import Image
 
 
@@ -16,9 +18,16 @@ class Classifier:
     def __init__(self) -> None:
         self.model = self.load_model()
         self.next_target_ip = os.getenv("NEXT_TARGET_IP", "localhost")
-        self.next_target_port = os.getenv("NEXT_TARGET_PORT", "8004")
-        self.url_path = os.getenv("URL_PATH", "/predict")
+        self.next_target_port = os.getenv("NEXT_TARGET_PORT", "8080")
+        self.url_path = os.getenv("URL_PATH", "/receive")
         self.session = None
+    
+    async def initialize(self):
+        self.session = ClientSession(
+            base_url=f"http://{self.next_target_ip}:{self.next_target_port}",
+            timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30))),
+            connector=TCPConnector(limit=0)
+        )
 
     def load_model(self):
         self.weights = ResNet50_Weights.IMAGENET1K_V1
@@ -28,10 +37,12 @@ class Classifier:
         return model
 
     
-    async def infer(self, req: dict) -> dict:
+    async def infer(self, req) -> dict:
         batch = []
+        arrival_time = time.time()
         for query in req:
             data = query["data"]
+            query["arrival-classifier"] = arrival_time
             decoded = base64.b64decode(data)
             inp = Image.open(io.BytesIO(decoded))
             inp = self.preprocessor(inp)
@@ -39,12 +50,23 @@ class Classifier:
 
         batch = torch.from_numpy(np.array(batch))
         preds = self.model(batch)
-
+        
+        tasks = []
         for i in range(len(batch)):
+            labels = []
             for idx in list(preds[i].sort()[1])[-1:-6:-1]:
-                print(self.weights.meta["categories"][idx])
-            print()
+                labels.append(self.weights.meta["categories"][idx])
+            to_send = req[i]
+            to_send["data"] = labels
+            to_send["leaving-classifier"] = time.time()
+
+            tasks.append(asyncio.create_task(self.send(to_send)))
         return {"received": True}
+    
+    async def send(self, data):
+        async with self.session.post(self.url_path, data=json.dumps(data)) as response:
+            await response.text()
+            return
         
 
 model_server = Classifier()

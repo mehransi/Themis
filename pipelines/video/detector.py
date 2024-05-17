@@ -4,6 +4,7 @@ import io
 import json
 import numpy as np
 import os
+import time
 import torch
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
 from PIL import Image
@@ -32,10 +33,12 @@ class Detector:
             path="./yolov5s.pt",
         )
     
-    async def infer(self, req: dict):
+    async def infer(self, req):
         batch = []
+        arrival_time = time.time()
         for query in req:
             data = query["data"]
+            query["arrival-detector"] = arrival_time
             decoded = base64.b64decode(data)
             image = Image.open(io.BytesIO(decoded))
             image = np.array(image)
@@ -55,7 +58,11 @@ class Detector:
             im_base64 = Image.fromarray(best_detect["im"])
             im_base64.save(buffered, format="JPEG")
             im_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-            tasks.append(asyncio.create_task(self.send(im_base64)))
+
+            to_send = req[i]
+            to_send["data"] = im_base64
+            to_send["leaving-detector"] = time.time()
+            tasks.append(asyncio.create_task(self.send(to_send)))
 
             print("best detect", i, best_detect)
 
@@ -64,7 +71,7 @@ class Detector:
         return {"received": True}
     
     async def send(self, data):
-        async with self.session.post(self.url_path, data=data) as response:
+        async with self.session.post(self.url_path, data=json.dumps(data)) as response:
             await response.text()
             return
             
