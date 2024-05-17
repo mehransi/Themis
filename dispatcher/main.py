@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import sys
 import time
 from aiohttp import ClientSession, web, ClientTimeout, TCPConnector
 
@@ -13,6 +12,7 @@ class Dispatcher:
         self.url_path = os.getenv("URL_PATH", "/infer")
         self.idx = 0
         self.total_requests = 0
+        self.dispatcher_name = None
         self.sessions = {}
         self.backend_names = []
         self.batch_size = None
@@ -22,7 +22,8 @@ class Dispatcher:
     
     async def initialize(self, data: dict):
         asyncio.create_task(self.dispatch())
-        self.backend_port = data["backends"][0]["port"]
+        self.dispatcher_name = data["dispatcher_name"]
+        self.backend_port = int(data["backends_port"])
         self.batch_size = data["batch_size"]
         for backend in data["backends"]:
             self.sessions[backend["name"]] = ClientSession(
@@ -37,7 +38,7 @@ class Dispatcher:
         if data.get("batch_size"):
             self.batch_size = int(data["batch_size"])
     
-    def reset_backends(self, data: dict):
+    async def reset_backends(self, data: dict):
         for backend in data["backends"]:
             if backend["name"] not in self.backend_names:
                 self.sessions[backend["name"]] = ClientSession(
@@ -59,8 +60,8 @@ class Dispatcher:
         self.idx = 0
 
     
-    async def receive(self, data):
-        await self.queue.put({"data": data, "arrival": time.time()})
+    async def receive(self, data: dict):
+        await self.queue.put({f"arrival-{self.dispatcher_name}": time.time(), **data})
         if self.queue.qsize() < self.batch_size:
             return {"received": True}
         self.event.set()
@@ -88,7 +89,7 @@ class Dispatcher:
             if self.queue.qsize() >= self.batch_size:
                 for _ in range(self.batch_size):
                     qd = await self.queue.get()
-                    # TODO: Save queueing delay for the exporter
+                    qd[f"leaving-{self.dispatcher_name}"] = time.time()
                     batch.append(qd)
             else:
                 pass # Fixme
@@ -115,13 +116,13 @@ async def initialize(request):
 
 
 async def predict(request):
-    data = await request.text()
+    data = await request.json()
     return web.json_response(await dispatcher.receive(data))
 
 
 async def reset_backends(request):
     data = await request.json()
-    dispatcher.reset_backends(data)
+    await dispatcher.reset_backends(data)
     return web.json_response({"success": True})
 
 
@@ -149,4 +150,4 @@ app.add_routes(
 )
 
 if __name__ == '__main__':
-    web.run_app(app, host="0.0.0.0", port=int(sys.argv[1]))
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("DISPATCHER_PORT", 8002)))
