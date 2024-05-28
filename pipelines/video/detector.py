@@ -13,13 +13,14 @@ from PIL import Image
 class Detector:
 
     def __init__(self) -> None:
-        self.model = self.load_model()
         self.next_target_ip = os.getenv("NEXT_TARGET_IP", "localhost")
         self.next_target_port = os.getenv("NEXT_TARGET_PORT", "8002")
         self.url_path = os.getenv("URL_PATH", "/predict")
         self.session = None
+        self.model = None
     
     async def initialize(self):
+        self.model = self.load_model()
         self.session = ClientSession(
             base_url=f"http://{self.next_target_ip}:{self.next_target_port}",
             timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30))),
