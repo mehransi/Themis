@@ -160,6 +160,7 @@ def initialize_classifier(classifier_ip):
                 }),
                 headers={'Content-type':'application/json', 'Accept':'application/json'}
             )
+            break
         except Exception as e:
             print("initialize classifier exception")
             print(e)

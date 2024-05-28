@@ -66,7 +66,7 @@ class Detector:
             to_send = req[i]
             to_send["data"] = im_base64
             to_send["leaving-detector"] = time.time()
-            to_send[f"batch-inference-time-{len(batch)}"] = t
+            to_send[f"detector-batch-inference-time-{len(batch)}"] = t
             tasks.append(asyncio.create_task(self.send(to_send)))
 
             print("best detect", i, best_detect)

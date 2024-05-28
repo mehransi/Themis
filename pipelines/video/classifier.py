@@ -61,7 +61,7 @@ class Classifier:
                 labels.append(self.weights.meta["categories"][idx])
             to_send = req[i]
             to_send["data"] = labels
-            to_send[f"batch-inference-time-{len(batch)}"]
+            to_send[f"classifier-batch-inference-time-{len(batch)}"] = t
             to_send["leaving-classifier"] = time.time()
 
             tasks.append(asyncio.create_task(self.send(to_send)))
