@@ -30,6 +30,7 @@ class Classifier:
         )
 
     def load_model(self):
+        torch.set_num_interop_threads(1)
         self.weights = ResNet50_Weights.IMAGENET1K_V1
         model = resnet50(weights=self.weights)
         model.eval()
@@ -49,7 +50,9 @@ class Classifier:
             batch.append(inp)
 
         batch = torch.from_numpy(np.array(batch))
+        t = time.perf_counter()
         preds = self.model(batch)
+        t = time.perf_counter() - t
         
         tasks = []
         for i in range(len(batch)):
@@ -58,6 +61,7 @@ class Classifier:
                 labels.append(self.weights.meta["categories"][idx])
             to_send = req[i]
             to_send["data"] = labels
+            to_send[f"batch-inference-time-{len(batch)}"]
             to_send["leaving-classifier"] = time.time()
 
             tasks.append(asyncio.create_task(self.send(to_send)))
@@ -75,16 +79,21 @@ async def initialize(request):
     await model_server.initialize()
     return web.json_response({"success": True})
 
+async def update_threads(request):
+    req = await request.json()
+    torch.set_num_threads(int(req["threads"]))
+    return web.json_response({"success": True})
+
 async def infer(request):
     req = await request.json()
     return web.json_response(await model_server.infer(req))
-
 
 
 app = web.Application()
 app.add_routes(
     [
         web.post("/initialize", initialize),
+        web.post("/update-threads", update_threads),
         web.post("/infer", infer),
     ]
 )

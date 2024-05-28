@@ -27,6 +27,7 @@ class Detector:
         )
     
     def load_model(self):
+        torch.set_num_interop_threads(1)
         return torch.hub.load(
             "ultralytics/yolov5",
             "custom",
@@ -43,7 +44,10 @@ class Detector:
             image = Image.open(io.BytesIO(decoded))
             image = np.array(image)
             batch.append(image)
+        
+        t = time.perf_counter()
         batch_result = self.model(batch)
+        t = time.perf_counter() - t
         tasks = []
         for i in range(len(batch)):
             res = batch_result.tolist()[i]
@@ -62,6 +66,7 @@ class Detector:
             to_send = req[i]
             to_send["data"] = im_base64
             to_send["leaving-detector"] = time.time()
+            to_send[f"batch-inference-time-{len(batch)}"] = t
             tasks.append(asyncio.create_task(self.send(to_send)))
 
             print("best detect", i, best_detect)
@@ -76,22 +81,27 @@ class Detector:
             return
             
 
-
 model_server = Detector()
-
-async def infer(request):
-    req = await request.json()
-    return web.json_response(await model_server.infer(req))
 
 async def initialize(request):
     await model_server.initialize()
     return web.json_response({"success": True})
+
+async def update_threads(request):
+    req = await request.json()
+    torch.set_num_threads(int(req["threads"]))
+    return web.json_response({"success": True})
+
+async def infer(request):
+    req = await request.json()
+    return web.json_response(await model_server.infer(req))
 
 
 app = web.Application()
 app.add_routes(
     [
         web.post("/initialize", initialize),
+        web.post("/update-threads", update_threads),
         web.post("/infer", infer),
     ]
 )

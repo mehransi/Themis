@@ -148,3 +148,4 @@ pyrightconfig.json
 
 
 .python-version
+tests/
