@@ -5,7 +5,7 @@ import os
 import torch
 
 from PIL import Image
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet18, ResNet18_Weights
 from aiohttp import web
 from PIL import Image
 
@@ -15,8 +15,8 @@ class Classifier(ModelServer):
 
     def load_model(self):
         torch.set_num_interop_threads(1)
-        self.weights = ResNet50_Weights.IMAGENET1K_V1
-        model = resnet50(weights=self.weights)
+        self.weights = ResNet18_Weights.IMAGENET1K_V1
+        model = resnet18(weights=self.weights)
         model.eval()
         self.preprocessor = self.weights.transforms()
         return model

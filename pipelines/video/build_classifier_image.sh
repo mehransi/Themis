@@ -6,6 +6,8 @@ path=`dirname "$path"`
 
 cp $path/../model_server.py $path
 
-docker build -t mehransi/main:pelastic-video-classifier -f $path/classifier.Dockerfile $path
+image_name="mehransi/main:pelastic-video-classifier"
+docker build -t $image_name -f $path/classifier.Dockerfile $path
+docker push $image_name
 
 rm $path/model_server.py
