@@ -10,7 +10,8 @@ RUN pip install aiohttp==3.9.5
 RUN pip install opencv-python-headless
 RUN pip install gitpython==3.1.43
 
-COPY yolov5s.pt yolov5s.pt
+COPY yolov5n.pt yolov5n.pt
+COPY model_server.py model_server.py
 COPY detector.py detector.py
 
 ENTRYPOINT ["python", "detector.py"]
