@@ -133,21 +133,24 @@ async def reset_batch_size(request):
 
 
 async def export_request_count(request):
-    content = "# HELP dispatcher_requests_total Total number of requests labeled by model used for inference.\n"
+    content = "# HELP dispatcher_requests_total Total number of requests\n"
     content += "# TYPE dispatcher_requests_total counter\n"
-    content += f'dispatcher_requests_total {dispatcher.total_requests}\n'
+    if dispatcher.dispatcher_name:
+        content += f'dispatcher_requests_total {dispatcher.total_requests}\n'
     return web.Response(body=content)
 
 
 app = web.Application()
-app.add_routes(
-    [
-        web.post("/initialize", initialize),
-        web.post("/reset-backends", reset_backends),
-        web.post("/predict", predict),
-        web.get("/metrics", export_request_count),
-    ]
-)
+routes = [
+    web.post("/initialize", initialize),
+    web.post("/reset-backends", reset_backends),
+    web.post("/reset-batch", reset_batch_size),
+    web.post("/predict", predict),
+]
+if os.getenv("EXPORT_REQUESTS_TOTAL"):
+    routes.append( web.get("/metrics", export_request_count))
+
+app.add_routes(routes)
 
 if __name__ == '__main__':
     web.run_app(app, host="0.0.0.0", port=int(os.getenv("DISPATCHER_PORT", 8002)))
