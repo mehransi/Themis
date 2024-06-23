@@ -93,7 +93,7 @@ def deploy_dispatchers():
 
             
 def deploy_adapter(classifier_dispatcher_ip):
-    adapter_labels = {"project": "adapter", "pipeline": "video", "component": "adapter"}
+    adapter_labels = {"project": "pelastic", "pipeline": "video", "component": "adapter"}
     create_deployment(
         ADAPTER_DEPLOY_NAME,
         [

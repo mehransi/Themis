@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
  name: pelastic-podmonitor
- namespace: mehran
+ namespace: observability
  labels:
    podmonitor: pelastic
 spec:
