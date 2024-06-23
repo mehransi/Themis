@@ -121,7 +121,11 @@ def deploy_adapter(classifier_dispatcher_ip):
                             "image": "mehransi/main:pelastic-video-detector",
                             "request_mem": "1G",
                             "limit_mem": "1G",
-                            "env_vars": {"NEXT_TARGET_ENDPOINT": f"{classifier_dispatcher_ip}:{DISPATCHER_PORT}", "PORT": f"{DETECTOR_PORT}"},
+                            "env_vars": {
+                                "NEXT_TARGET_ENDPOINT": f"{classifier_dispatcher_ip}:{DISPATCHER_PORT}",
+                                "PORT": f"{DETECTOR_PORT}",
+                                "URL_PATH": "/predict"
+                            },
                             "container_ports": [DETECTOR_PORT],
                         },
                         1: {

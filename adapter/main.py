@@ -51,7 +51,9 @@ class Adapter:
         tasks = []
         for idx, endpoint in data["dispatcher_endpoints"].items():
             self.dispatcher_sessions[int(idx)] = ClientSession(base_url=f"http://{endpoint}")
-            tasks.append(asyncio.create_task(self.create_pod(int(idx), int(data["initial_pod_cpus"][idx]))))
+            c = int(data["initial_pod_cpus"][idx])
+            tasks.append(asyncio.create_task(self.create_pod(int(idx), c)))
+            self.current_state[int(idx)] = [c, 1, 4]
         
         await asyncio.gather(*tasks)
         
