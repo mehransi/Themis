@@ -51,6 +51,9 @@ class Adapter:
             self.dispatcher_sessions[int(idx)] = ClientSession(base_url=f"http://{endpoint}")
             tasks.append(asyncio.create_task(self.create_pod(int(idx), int(data["initial_pod_cpus"][idx]))))
         
+        await asyncio.gather(*tasks)
+        
+        tasks = []
         for i in range(len(self.dispatcher_sessions)):
             tasks.append(asyncio.create_task(self.initialize_dispatcher(i)))
         
@@ -186,8 +189,8 @@ class Adapter:
                 labels=self.pod_labels[stage_idx]
             )
         )
-        await self.initialize_pod(f"{pod['ip']}:{self.pod_ports[stage_idx]}", cpu)
-        self.stage_replicas[stage_idx].append({"name": pod["name"], "ip": pod["ip"]})
+        await self.initialize_pod(f"{pod['pod_ip']}:{self.pod_ports[stage_idx]}", cpu)
+        self.stage_replicas[stage_idx].append({"name": pod["name"], "ip": pod["pod_ip"]})
         return pod
         
     

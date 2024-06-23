@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+ name: pelastic-podmonitor
+ namespace: mehran
+ labels:
+   podmonitor: pelastic
+spec:
+ namespaceSelector:
+   any: true
+ podMetricsEndpoints:
+ - interval: 1s
+   path: /metrics
+ selector:
+   matchLabels:
+     project: pelastic

@@ -28,7 +28,12 @@ CLASSIFIER_POD_LABELS = {"pipeline": "video", "component": "model-server", "stag
 
 
 def deploy_dispatchers():
-    detector_dispatcher_labels = {"pipeline": "video", "component": "dispatcher", "stage": f"{VIDEO_DETECTOR}-dispatcher"}
+    detector_dispatcher_labels = {
+        "project": "pelastic",
+        "pipeline": "video",
+        "component": "dispatcher",
+        "stage": f"{VIDEO_DETECTOR}-dispatcher"
+    }
     create_deployment(
         f"{VIDEO_DETECTOR}-dispatcher",
         [
@@ -55,7 +60,11 @@ def deploy_dispatchers():
         namespace=namespace
     )
 
-    classifier_dispatcher_labels = {"pipeline": "video", "component": "dispatcher", "stage": f"{VIDEO_CLASSIFIER}-dispatcher"}
+    classifier_dispatcher_labels = {
+        "pipeline": "video",
+        "component": "dispatcher",
+        "stage": f"{VIDEO_CLASSIFIER}-dispatcher"
+    }
     create_deployment(
         f"{VIDEO_CLASSIFIER}-dispatcher",
         [
@@ -84,7 +93,7 @@ def deploy_dispatchers():
 
             
 def deploy_adapter(classifier_dispatcher_ip):
-    adapter_labels = {"pipeline": "video", "component": "adapter"}
+    adapter_labels = {"project": "adapter", "pipeline": "video", "component": "adapter"}
     create_deployment(
         ADAPTER_DEPLOY_NAME,
         [
@@ -154,6 +163,7 @@ def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
 
 
 if __name__ == "__main__":
+    os.system(f"microk8s kubectl apply -f podmonitor.yaml")
     deploy_dispatchers()
 
     wait_till_pod_is_ready(f"{VIDEO_DETECTOR}-dispatcher", namespace)
