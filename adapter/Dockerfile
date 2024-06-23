@@ -16,5 +16,6 @@ ENV LSTM_MODEL=/app/lstm.keras
 COPY optimizer.py optimizer.py
 COPY main.py main.py
 COPY runner.sh runner.sh
+COPY signal_sender.py signal_sender.py
 
 ENTRYPOINT ["bash", "runner.sh"]

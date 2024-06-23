@@ -1,9 +1,9 @@
 import requests
 import json
+import os
 import time
 
-from kube_resources.configmaps import create_configmap, get_configmap
-from kube_resources.pods import create_pod, get_pod
+from kube_resources.deployments import create_deployment
 from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
@@ -13,17 +13,23 @@ namespace = "mehran"
 
 VIDEO_DETECTOR = "video-detector"
 VIDEO_CLASSIFIER = "video-classifier"
+ADAPTER_DEPLOY_NAME = "pelastic-adapter"
 
 DISPATCHER_PORT = 8000
 DETECTOR_PORT = 8000
 CLASSIFIER_PORT = 8000
+ADAPTER_PORT = 8000
 
-DETECTOR_INITIAL_CPU = 1
-CLASSIFIER_INITIAL_CPU = 1
+EXPORTER_IP = os.getenv("NODE_IP")
+EXPORTER_PORT = 8008
+
+DETECTOR_POD_LABELS = {"pipeline": "video", "component": "model-server", "stage": VIDEO_DETECTOR}
+CLASSIFIER_POD_LABELS = {"pipeline": "video", "component": "model-server", "stage": VIDEO_CLASSIFIER}
 
 
 def deploy_dispatchers():
-    create_pod(
+    detector_dispatcher_labels = {"pipeline": "video", "component": "dispatcher", "stage": f"{VIDEO_DETECTOR}-dispatcher"}
+    create_deployment(
         f"{VIDEO_DETECTOR}-dispatcher",
         [
             {
@@ -33,15 +39,24 @@ def deploy_dispatchers():
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
-                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}"},
+                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "EXPORT_REQUESTS_TOTAL": 1},
                 "container_ports": [DISPATCHER_PORT],
             }
         ],
+        replicas=1,
         namespace=namespace,
-        labels={"pipeline": "video", "stage": f"{VIDEO_DETECTOR}-dispatcher"}
+        labels=detector_dispatcher_labels
+    )
+    create_service(
+        f"{VIDEO_DETECTOR}-dispatcher-svc",
+        target_port=DISPATCHER_PORT,
+        port=DISPATCHER_PORT,
+        selector=detector_dispatcher_labels,
+        namespace=namespace
     )
 
-    create_pod(
+    classifier_dispatcher_labels = {"pipeline": "video", "component": "dispatcher", "stage": f"{VIDEO_CLASSIFIER}-dispatcher"}
+    create_deployment(
         f"{VIDEO_CLASSIFIER}-dispatcher",
         [
             {
@@ -55,136 +70,111 @@ def deploy_dispatchers():
                 "container_ports": [DISPATCHER_PORT],
             }
         ],
+        replicas=1,
         namespace=namespace,
-        labels={"pipeline": "video", "stage": f"{VIDEO_CLASSIFIER}-dispatcher"}
+        labels=classifier_dispatcher_labels
+    )
+    create_service(
+        f"{VIDEO_CLASSIFIER}-dispatcher-svc",
+        target_port=DISPATCHER_PORT,
+        port=DETECTOR_PORT,
+        selector=classifier_dispatcher_labels,
+        namespace=namespace
     )
 
-
-def deploy_detector(next_target_ip, next_target_port):
-    create_pod(
-        VIDEO_DETECTOR,
+            
+def deploy_adapter(classifier_dispatcher_ip):
+    adapter_labels = {"pipeline": "video", "component": "adapter"}
+    create_deployment(
+        ADAPTER_DEPLOY_NAME,
         [
             {
-                "name": f"{VIDEO_DETECTOR}-container",
-                "image": "mehransi/main:pelastic-video-detector",
+                "name": f"{ADAPTER_DEPLOY_NAME}-container",
+                "image": "mehransi/main:pelastic-adapter",
                 "request_mem": "1G",
-                "request_cpu": f"{DETECTOR_INITIAL_CPU}",
+                "request_cpu": "1",
                 "limit_mem": "1G",
-                "limit_cpu": f"{DETECTOR_INITIAL_CPU}",
-                "env_vars": {"NEXT_TARGET_IP": next_target_ip, "NEXT_TARGET_PORT": f"{next_target_port}", "PORT": f"{DETECTOR_PORT}"},
-                "container_ports": [DETECTOR_PORT],
+                "limit_cpu": "1",
+                "env_vars": {
+                    "FIRST_DECIDE_DELAY_MINUTES": "1",
+                    "DECISION_INTERVAL": "5",
+                    "K8S_IN_CLUSTER_CLIENT": "true",
+                    "K8S_NAMESPACE": namespace, 
+                    "BASE_POD_NAMES": json.dumps({0: VIDEO_DETECTOR, 1: VIDEO_CLASSIFIER}),
+                    "POD_LABELS": json.dumps({
+                        0: DETECTOR_POD_LABELS,
+                        1: CLASSIFIER_POD_LABELS
+                    }),
+                    "POD_PORTS": json.dumps({0: DETECTOR_PORT, 1: CLASSIFIER_PORT}),
+                    "CONTAINER_CONFIGS": json.dumps({
+                        0: {
+                            "name": f"{VIDEO_DETECTOR}-container",
+                            "image": "mehransi/main:pelastic-video-detector",
+                            "request_mem": "1G",
+                            "limit_mem": "1G",
+                            "env_vars": {"NEXT_TARGET_ENDPOINT": f"{classifier_dispatcher_ip}:{DISPATCHER_PORT}", "PORT": f"{DETECTOR_PORT}"},
+                            "container_ports": [DETECTOR_PORT],
+                        },
+                        1: {
+                            "name": f"{VIDEO_CLASSIFIER}-container",
+                            "image": "mehransi/main:pelastic-video-classifier",
+                            "request_mem": "1G",
+                            "limit_mem": "1G",
+                            "env_vars": {"NEXT_TARGET_ENDPOINT": f"{EXPORTER_IP}:{EXPORTER_PORT}", "PORT": f"{CLASSIFIER_PORT}"},
+                            "container_ports": [CLASSIFIER_PORT],
+                        }
+                    })
+                    
+                },
+                "container_ports": [ADAPTER_PORT],
             }
         ],
+        replicas=1,
         namespace=namespace,
-        labels={"pipeline": "video", "stage": VIDEO_DETECTOR}
+        labels=adapter_labels
+    )
+    create_service(
+        f"{ADAPTER_DEPLOY_NAME}-svc",
+        target_port=ADAPTER_PORT,
+        port=ADAPTER_PORT,
+        selector=adapter_labels,
+        namespace=namespace
     )
 
-def deploy_classifier(next_target_ip, next_target_port):
-    create_pod(
-        VIDEO_CLASSIFIER,
-        [
-            {
-                "name": f"{VIDEO_CLASSIFIER}-container",
-                "image": "mehransi/main:pelastic-video-classifier",
-                "request_mem": "1G",
-                "request_cpu": f"{CLASSIFIER_INITIAL_CPU}",
-                "limit_mem": "1G",
-                "limit_cpu": f"{CLASSIFIER_INITIAL_CPU}",
-                "env_vars": {"NEXT_TARGET_IP": next_target_ip, "NEXT_TARGET_PORT": f"{next_target_port}", "PORT": f"{CLASSIFIER_PORT}"},
-                "container_ports": [CLASSIFIER_PORT],
-            }
-        ],
-        namespace=namespace,
-        labels={"pipeline": "video", "stage": VIDEO_CLASSIFIER}
-    )
-    
-
-def initialize_dispatchers(detector_dispatcher_ip, detector_ip, classifier_dispatcher_ip, classifier_ip):
+def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
     response = requests.post(
-        f"http://{detector_dispatcher_ip}:{DISPATCHER_PORT}/initialize",
+        f"http://{adapter_ip}:{ADAPTER_PORT}/initialize",
         data=json.dumps({
-            "dispatcher_name": f"{VIDEO_DETECTOR}-dispatcher",
-            "backends_port": DETECTOR_PORT,
-            "batch_size": 4,
-            "backends": [{"name": "detector1", "ip": detector_ip}]
+            "prometheus_endpoint": prometheus_endpoint,
+            "dispatcher_endpoints": dispatcher_endpoints,
+            "initial_pod_cpus": {0: 4, 1: 4}
         }),
         headers={'Content-type':'application/json', 'Accept':'application/json'}
     )
 
-    response = requests.post(
-        f"http://{classifier_dispatcher_ip}:{DISPATCHER_PORT}/initialize",
-        data=json.dumps({
-            "dispatcher_name": f"{VIDEO_CLASSIFIER}-dispatcher",
-            "backends_port": CLASSIFIER_PORT,
-            "batch_size": 2,
-            "backends": [{"name": "classifier1", "ip": classifier_ip}]
-        }), 
-        headers={'Content-type':'application/json', 'Accept':'application/json'}
-    )
-
-
-def initialize_detector(detector_ip):
-    while True:
-        time.sleep(0.1)
-        try:
-            response = requests.post(
-                f"http://{detector_ip}:{DETECTOR_PORT}/initialize", 
-                headers={'Content-type':'application/json', 'Accept':'application/json'}
-            )
-            response = requests.post(
-                f"http://{detector_ip}:{DETECTOR_PORT}/update-threads", 
-                data=json.dumps({
-                    "threads": DETECTOR_INITIAL_CPU
-                }),
-                headers={'Content-type':'application/json', 'Accept':'application/json'}
-            )
-            break
-        except Exception as e:
-            print("initialize detector exception")
-            print(e)
-            print()
-
-
-def initialize_classifier(classifier_ip):
-    while True:
-        time.sleep(0.1)
-        try:
-            response = requests.post(
-                f"http://{classifier_ip}:{CLASSIFIER_PORT}/initialize",
-                headers={'Content-type':'application/json', 'Accept':'application/json'}
-            )
-            response = requests.post(
-                f"http://{classifier_ip}:{CLASSIFIER_PORT}/update-threads",
-                data=json.dumps({
-                    "threads": CLASSIFIER_INITIAL_CPU
-                }),
-                headers={'Content-type':'application/json', 'Accept':'application/json'}
-            )
-            break
-        except Exception as e:
-            print("initialize classifier exception")
-            print(e)
-            print()
-            
 
 if __name__ == "__main__":
     deploy_dispatchers()
 
-    detector_dispatcher_ip = wait_till_pod_is_ready(f"{VIDEO_DETECTOR}-dispatcher", namespace)
-    classifier_dispatcher_ip = wait_till_pod_is_ready(f"{VIDEO_CLASSIFIER}-dispatcher", namespace)
-
-    deploy_detector(classifier_dispatcher_ip, DISPATCHER_PORT)
-    exporter_ip = "localhost"  # FIXME
-    deploy_classifier(exporter_ip, 8008)
-    detector_ip = wait_till_pod_is_ready(VIDEO_DETECTOR, namespace)
-    classifier_ip = wait_till_pod_is_ready(VIDEO_CLASSIFIER, namespace)
-
+    wait_till_pod_is_ready(f"{VIDEO_DETECTOR}-dispatcher", namespace)
+    wait_till_pod_is_ready(f"{VIDEO_CLASSIFIER}-dispatcher", namespace)
+    detector_dispatcher_ip = get_service(f"{VIDEO_DETECTOR}-dispatcher-svc", namespace=namespace)["cluster_ip"]
+    classifier_dispatcher_ip = get_service(f"{VIDEO_CLASSIFIER}-dispatcher-svc", namespace=namespace)["cluster_ip"]
     
-    initialize_dispatchers(detector_dispatcher_ip, detector_ip, classifier_dispatcher_ip, classifier_ip)
+    deploy_adapter(classifier_dispatcher_ip)
+    wait_till_pod_is_ready(ADAPTER_DEPLOY_NAME, namespace)
+    adapter_ip = get_service(f"{ADAPTER_DEPLOY_NAME}-svc", namespace=namespace)["cluster_ip"]
     
-    initialize_detector(detector_ip)
-    initialize_classifier(classifier_ip)
-
+    prometheus_service = get_service("kube-prom-stack-kube-prome-prometheus", namespace="observability")
+    prometheus_endpoint = f"{prometheus_service['cluster_ip']}:{prometheus_service['port']}"
     
-
+    time.sleep(5)
+    initialize_adapter(
+        adapter_ip,
+        prometheus_endpoint,
+        {
+            0: f"{detector_dispatcher_ip}:{DISPATCHER_PORT}",
+            1: f"{classifier_dispatcher_ip}:{DISPATCHER_PORT}"
+        }
+    )
     

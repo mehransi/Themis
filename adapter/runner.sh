@@ -4,7 +4,7 @@
 python main.py &
   
 # Start the signal
-python signal.py &
+python signal_sender.py &
   
 # Wait for any process to exit
 wait -n

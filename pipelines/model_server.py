@@ -10,8 +10,7 @@ from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
 class ModelServer:
 
     def __init__(self) -> None:
-        self.next_target_ip = os.getenv("NEXT_TARGET_IP", "localhost")
-        self.next_target_port = os.getenv("NEXT_TARGET_PORT")
+        self.next_target_endpoint = os.getenv("NEXT_TARGET_ENDPOINT", "localhost")
         self.url_path = os.getenv("URL_PATH", "/receive")
         self.session = None
         self.model = None
@@ -19,7 +18,7 @@ class ModelServer:
     async def initialize(self):
         self.model = self.load_model()
         self.session = ClientSession(
-            base_url=f"http://{self.next_target_ip}:{self.next_target_port}",
+            base_url=f"http://{self.next_target_endpoint}",
             timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30))),
             connector=TCPConnector(limit=0)
         )

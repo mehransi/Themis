@@ -9,12 +9,20 @@ import string
 import time
 import tensorflow as tf
 from aiohttp import ClientSession, web
-from tensorflow.python.keras.models import load_model
+from tensorflow.keras import saving
 from typing import Dict, List
 from kube_resources.pods import create_pod, update_pod, delete_pod
 
 from optimizer import horizontal_2d, vertical_2d
 
+
+def load_pipeline_data(d: dict):
+    data = {}
+    for k, v in json.loads(d).items():
+        data[int(k)] = v
+        
+    return data
+    
 class Adapter:
     def __init__(self) -> None:
         self.current_state = {}  # {stage: [cores, replicas, batch_size]}
@@ -22,26 +30,41 @@ class Adapter:
         self.latency_models = {}
         self.dispatcher_sessions: Dict[int, ClientSession] = {} 
         self.k8s_namespace = os.environ["K8S_NAMESPACE"]
-        self.base_pod_names = json.loads(os.environ["BASE_POD_NAMES"])
-        self.pod_labels = json.loads(os.environ["POD_LABELS"])
-        self.pod_ports = json.loads(os.environ["POD_PORTS"])
-        self.container_configs = json.loads(os.environ["CONTAINER_CONFIGS"])
+        self.base_pod_names = load_pipeline_data(os.environ["BASE_POD_NAMES"])
+        self.pod_labels = load_pipeline_data(os.environ["POD_LABELS"])
+        self.pod_ports = load_pipeline_data(os.environ["POD_PORTS"])
+        self.container_configs = load_pipeline_data(os.environ["CONTAINER_CONFIGS"])
         self.max_batch_size = None
         self.max_cores = None
         self.latency_slo = None
-        self.lstm_model = load_model(os.environ["LSTM_MODEL"])
+        self.lstm_model = None
         self.prometheus_session = None
         self.logger = logging.getLogger()
     
     async def initialize(self, data: dict):
+        self.lstm_model = saving.load_model(os.environ["LSTM_MODEL"])
         self.prometheus_session = ClientSession(
             base_url=f"http://{data['prometheus_endpoint']}"
         )
+        tasks = []
         for idx, endpoint in data["dispatcher_endpoints"].items():
-            self.dispatcher_sessions[idx] = ClientSession(base_url=f"http://{endpoint}")
+            self.dispatcher_sessions[int(idx)] = ClientSession(base_url=f"http://{endpoint}")
+            tasks.append(asyncio.create_task(self.create_pod(int(idx), int(data["initial_pod_cpus"][idx]))))
         
-    
-    
+        for i in range(len(self.dispatcher_sessions)):
+            tasks.append(asyncio.create_task(self.initialize_dispatcher(i)))
+        
+        await asyncio.gather(*tasks)
+            
+    async def initialize_dispatcher(self, stage_idx):
+        async with self.dispatcher_sessions[stage_idx].post("/initialize", json={
+            "dispatcher_name": f"stage-{stage_idx}",
+            "backends_port": self.pod_ports[stage_idx],
+            "batch_size": 4,
+            "backends": self.stage_replicas[stage_idx]
+        }) as response:
+            response = await response.json()
+
     async def adapt(self):
         async with self.prometheus_session.get(
             f"/api/v1/query",
@@ -115,11 +138,11 @@ class Adapter:
                 if new_horizontal_config[i][0] >= self.current_state[i][1]:
                     for r in self.stage_replicas[i]:
                         tasks.append(
-                            self.update_pod(r, i, 1)
+                            asyncio.create_task(self.update_pod(r, i, 1))
                         )
                     for _ in range(new_horizontal_config[i][0] - self.current_state[i][1]):
                         tasks.append(
-                            self.create_pod(i, 1)
+                            asyncio.create_task(self.create_pod(i, 1))
                         )
                 else:
                     extra_pods_count = self.current_state[i][1] - new_horizontal_config[i][0]
