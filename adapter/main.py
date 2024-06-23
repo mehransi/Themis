@@ -11,7 +11,7 @@ import tensorflow as tf
 from aiohttp import ClientSession, web
 from tensorflow.keras import saving
 from typing import Dict, List
-from kube_resources.pods import create_pod, update_pod, delete_pod
+from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
 from optimizer import horizontal_2d, vertical_2d
 
@@ -34,6 +34,8 @@ class Adapter:
         self.pod_labels = load_pipeline_data(os.environ["POD_LABELS"])
         self.pod_ports = load_pipeline_data(os.environ["POD_PORTS"])
         self.container_configs = load_pipeline_data(os.environ["CONTAINER_CONFIGS"])
+        for i in range(len(self.container_configs)):
+            self.stage_replicas[i] = []
         self.max_batch_size = None
         self.max_cores = None
         self.latency_slo = None
@@ -176,7 +178,7 @@ class Adapter:
     async def create_pod(self, stage_idx, cpu: int):
         new_pod_name = f"{self.base_pod_names[stage_idx]}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=5))}"
         loop = asyncio.get_event_loop()
-        pod = await loop.run_in_executor(
+        await loop.run_in_executor(
             None,
             lambda: create_pod(
                 new_pod_name,
@@ -189,7 +191,20 @@ class Adapter:
                 labels=self.pod_labels[stage_idx]
             )
         )
-        await self.initialize_pod(f"{pod['pod_ip']}:{self.pod_ports[stage_idx]}", cpu)
+        while True:
+            await asyncio.sleep(0.05)
+            pod = await loop.run_in_executor(None, lambda: get_pod(new_pod_name, namespace=self.k8s_namespace))
+            if pod["pod_ip"] and pod["pod_ip"].lower() != "none":
+                break
+            
+        while True:
+            await asyncio.sleep(0.1)
+            try:
+                await self.initialize_pod(f"{pod['pod_ip']}:{self.pod_ports[stage_idx]}", cpu)
+                break
+            except:
+                pass
+        self.logger.info(f"New pod for stage {stage_idx} created. pod name: {pod['name']}, cpu: {cpu}")
         self.stage_replicas[stage_idx].append({"name": pod["name"], "ip": pod["pod_ip"]})
         return pod
         
@@ -253,8 +268,8 @@ adapter = Adapter()
 async def initialize(request):
     data = await request.json()
     if adapter.prometheus_session is None:
-        resp = await adapter.initialize(data)
-        return web.json_response({"success": True, **resp})
+        await adapter.initialize(data)
+        return web.json_response({"success": True})
     return web.json_response({"success": False, "message": "Already initialized."})
 
 
