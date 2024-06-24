@@ -4,10 +4,10 @@ metadata:
  name: pelastic-podmonitor
  namespace: observability
  labels:
-   podmonitor: pelastic
+  release: kube-prom-stack  # https://github.com/prometheus-operator/prometheus-operator/issues/3636
 spec:
  namespaceSelector:
-   any: true
+  any: true
  podMetricsEndpoints:
  - interval: 1s
    path: /metrics

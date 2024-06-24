@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import json
 import logging
 import numpy as np
@@ -9,6 +8,7 @@ import string
 import time
 import tensorflow as tf
 from aiohttp import ClientSession, web
+from datetime import datetime
 from tensorflow.keras import saving
 from typing import Dict, List
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
@@ -73,17 +73,20 @@ class Adapter:
             response = await response.json()
 
     async def adapt(self):
-        async with self.prometheus_session.get(
+        async with self.prometheus_session.post(
             f"/api/v1/query",
             params={
                 "query": f"sum(rate(dispatcher_requests_total[2s]))",
             }
         ) as response:
             response = await response.json()
-            current_rps = response["data"]["result"]["value"]
+            try:
+                current_rps = int(response["data"]["result"]["value"][1])
+            except TypeError:
+                current_rps = int(response["data"]["result"][0]["value"][1])
             
         now = datetime.now().timestamp()
-        async with self.prometheus_session.get(
+        async with self.prometheus_session.post(
             f"/api/v1/query_range",
             params={
                 "query": "sum(dispatcher_requests_total)",
