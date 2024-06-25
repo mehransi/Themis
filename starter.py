@@ -124,7 +124,8 @@ def deploy_adapter(classifier_dispatcher_ip):
                             "env_vars": {
                                 "NEXT_TARGET_ENDPOINT": f"{classifier_dispatcher_ip}:{DISPATCHER_PORT}",
                                 "PORT": f"{DETECTOR_PORT}",
-                                "URL_PATH": "/predict"
+                                "URL_PATH": "/predict",
+                                "YOLO_OFFLINE": "true"
                             },
                             "container_ports": [DETECTOR_PORT],
                         },

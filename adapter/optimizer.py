@@ -9,6 +9,8 @@ def latency(core, batch, alpha, beta, gamma, zeta):
 
 
 def horizontal_2d(b_max, slo, models, workload):
+    if workload == 0:
+        return {s: [1, 1, 1] for s in range(len(models))}
     dp = []
     best = []
     for i in range(len(models)):
@@ -64,6 +66,8 @@ def horizontal_2d(b_max, slo, models, workload):
 
 
 def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
+    if workload == 0:
+        return [1, 1, 1]
     dp = []
     best = []
     for i in range(len(models)):
