@@ -15,10 +15,10 @@ class Classifier(ModelServer):
 
     def load_model(self):
         torch.set_num_interop_threads(1)
-        self.weights = ResNet18_Weights.IMAGENET1K_V1
-        model = resnet18(weights=self.weights)
+        self.categories = ResNet18_Weights.IMAGENET1K_V1.meta["categories"]
+        model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         model.eval()
-        self.preprocessor = self.weights.transforms()
+        self.preprocessor = ResNet18_Weights.IMAGENET1K_V1.transforms()
         return model
     
     def preprocess(self, data):
@@ -33,10 +33,7 @@ class Classifier(ModelServer):
         return self.model(batch)
     
     def get_next_target_data(self, pred):
-        labels = []
-        for idx in list(pred.sort()[1])[-1:-6:-1]:
-            labels.append(self.weights.meta["categories"][idx])
-        return labels
+        return self.categories[torch.argmax(pred).item()]
         
 
 model_server = Classifier()
