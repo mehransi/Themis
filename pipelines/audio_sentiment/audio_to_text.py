@@ -12,7 +12,6 @@ from model_server import ModelServer, add_base_routes
 class AudioToText(ModelServer):
 
     def load_model(self):
-        torch.set_num_interop_threads(1)
         model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         self.processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
         return model

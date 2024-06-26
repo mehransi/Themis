@@ -9,7 +9,6 @@ from model_server import ModelServer, add_base_routes
 
 class SentimentAnalysis(ModelServer):
     def load_model(self):
-        torch.set_num_interop_threads(1)
         model = pipeline(
             task="sentiment-analysis", model="Souvikcmsa/SentimentAnalysisDistillBERT"
         )

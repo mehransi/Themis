@@ -14,7 +14,6 @@ from model_server import ModelServer, add_base_routes
 class Classifier(ModelServer):
 
     def load_model(self):
-        torch.set_num_interop_threads(1)
         self.categories = ResNet18_Weights.IMAGENET1K_V1.meta["categories"]
         model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         model.eval()

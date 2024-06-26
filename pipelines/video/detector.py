@@ -14,7 +14,6 @@ from model_server import ModelServer, add_base_routes
 class Detector(ModelServer):
     
     def load_model(self):
-        torch.set_num_interop_threads(1)
         return torch.hub.load(
             "ultralytics/yolov5",
             "custom",

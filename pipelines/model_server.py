@@ -76,8 +76,9 @@ def add_base_routes(app: web.Application, model_server: ModelServer):
     async def initialize(request):
         if model_server.model is None:
             req = await request.json()
-            torch.set_num_threads(int(req["threads"]))
+            torch.set_num_interop_threads(int(os.getenv("INTEROP_THREADS", 1)))
             await model_server.initialize()
+            torch.set_num_threads(int(req["threads"]))
             return web.json_response({"success": True})
         return web.json_response({"success": False, "message": "Already initialized."})
 
