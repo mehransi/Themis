@@ -12,11 +12,11 @@ from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
 namespace = "mehran"
 
-POD_NAME = "video-classifier"
+POD_NAME = "video-detector"
 
 PORT = 8000
 
-EXPORTER_IP = os.getenv("NODE_IP")
+EXPORTER_IP = os.environ["NODE_IP"]
 EXPORTER_PORT = 8082
 SOURCE_NAME = "Detector"
 IMAGE_NAME = "mehransi/main:pelastic-video-detector"
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         f"http://{pod_ip}:{PORT}/infer", data=json.dumps([{"data": input_data}])
     )
     
-    for cpu in [1, 2, 4, 8, 16]:
+    for cpu in range(1, 11):
         update_pod(
             POD_NAME,
             [
@@ -97,16 +97,19 @@ if __name__ == "__main__":
         )
         response = requests.post(f"http://{pod_ip}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
         assert json.loads(response.text) == {"success": True}
-        for batch in [1, 2, 4, 8, 16]:
+        time.sleep(0.2)
+        for batch in range(1, 11):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})
-            for repeat in range(128 // batch):
+            for repeat in range(128 // batch + batch):
                 t = time.perf_counter()
                 response = requests.post(f"http://{pod_ip}:{PORT}/infer", data=json.dumps(batch_input))
                 t = time.perf_counter() - t
             print(t, response.text)
+            time.sleep(3)
             requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/write", data=json.dumps({"filename": f"{log_file_path}/{SOURCE_NAME}_latencies_core{cpu}_batch{batch}.json"}))
+            time.sleep(2)
 
     delete_pod(POD_NAME, namespace)
     os.system(f"kill -9 {exporter.pid}")

@@ -8,8 +8,12 @@ class Exporter:
         self.logs = []
     
     async def receive(self, data: dict):
-        latency = data[f"leaving-{self.source_name}"] - data[f"arrival-{self.source_name}"]        
-        self.logs.append(latency)
+        latency = data[f"leaving-{self.source_name}"] - data[f"arrival-{self.source_name}"]
+        del data[f"leaving-{self.source_name}"]
+        del data[f"arrival-{self.source_name}"]
+        del data["data"]
+        data["e2e"] = latency
+        self.logs.append(data)
         return {"saved": True}
 
     async def write_to_file(self, filename):
