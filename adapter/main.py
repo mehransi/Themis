@@ -27,7 +27,7 @@ class Adapter:
     def __init__(self) -> None:
         self.current_state = {}  # {stage: [cores, replicas, batch_size]}
         self.stage_replicas = {}  # {stage: [{name: replica1_pod_name, ip: replica1_pod_ip}, ...]}
-        self.latency_models = {}
+        self.latency_models = load_pipeline_data(os.environ["LATENCY_MODELS"])
         self.dispatcher_sessions: Dict[int, ClientSession] = {} 
         self.k8s_namespace = os.environ["K8S_NAMESPACE"]
         self.base_pod_names = load_pipeline_data(os.environ["BASE_POD_NAMES"])

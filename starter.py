@@ -20,7 +20,7 @@ DETECTOR_PORT = 8000
 CLASSIFIER_PORT = 8000
 ADAPTER_PORT = 8000
 
-EXPORTER_IP = os.getenv("NODE_IP")
+EXPORTER_IP = os.environ["NODE_IP"]
 EXPORTER_PORT = 8008
 
 DETECTOR_POD_LABELS = {"pipeline": "video", "component": "model-server", "stage": VIDEO_DETECTOR}
@@ -110,6 +110,10 @@ def deploy_adapter(classifier_dispatcher_ip):
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "K8S_NAMESPACE": namespace, 
                     "BASE_POD_NAMES": json.dumps({0: VIDEO_DETECTOR, 1: VIDEO_CLASSIFIER}),
+                    "LATENCY_MODELS": json.dumps({
+                        0: [84.77978914419758, 21.867603656295096, 0.3475406625080165, -3.3934556468994534],
+                        1: [61.4976951513907, 3.815267577294629, 14.901415567121793, 11.041543118691706],
+                    }),
                     "POD_LABELS": json.dumps({
                         0: DETECTOR_POD_LABELS,
                         1: CLASSIFIER_POD_LABELS
