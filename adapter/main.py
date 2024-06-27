@@ -36,9 +36,9 @@ class Adapter:
         self.container_configs = load_pipeline_data(os.environ["CONTAINER_CONFIGS"])
         for i in range(len(self.container_configs)):
             self.stage_replicas[i] = []
-        self.max_batch_size = None
-        self.max_cores = None
-        self.latency_slo = None
+        self.max_batch_size = int(os.environ["MAX_BATCH_SIZE"])
+        self.max_cores = int(os.environ["MAX_CPU_CORES"])
+        self.latency_slo = int(os.environ["LATENCY_SLO"])
         self.lstm_model = None
         self.prometheus_session = None
         self.logger = logging.getLogger()
