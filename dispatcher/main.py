@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import time
 from aiohttp import ClientSession, web, ClientTimeout, TCPConnector
@@ -18,6 +19,7 @@ class Dispatcher:
         self.batch_size = None
         self.queue = asyncio.Queue()  # might consider PriorityQueue for EDF
         self.event = asyncio.Event()
+        self.logger = logging.getLogger()
         
     
     async def initialize(self, data: dict):
@@ -37,6 +39,7 @@ class Dispatcher:
     def reset_batch_size(self, data: dict):
         if data.get("batch_size"):
             self.batch_size = int(data["batch_size"])
+            self.logger.info("New batch size:", self.batch_size)
     
     async def reset_backends(self, data: dict):
         for backend in data["backends"]:
@@ -61,6 +64,7 @@ class Dispatcher:
 
     
     async def receive(self, data: dict):
+        self.total_requests += 1
         await self.queue.put({f"arrival-{self.dispatcher_name}": time.time(), **data})
         if self.queue.qsize() < self.batch_size:
             return {"received": True}
@@ -94,12 +98,10 @@ class Dispatcher:
             else:
                 pass # Fixme
 
-            self.total_requests += len(batch)
             session: ClientSession = self.sessions[backend_name]
             self.is_free[backend_name] = False
             async with session.post(f"{self.url_path}", data=json.dumps(batch)) as response:
                 response = await response.text()
-                print("response in dispatcher", response)
                 self.is_free[backend_name] = True
                 
 

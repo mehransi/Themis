@@ -27,6 +27,8 @@ class Adapter:
     def __init__(self) -> None:
         self.current_state = {}  # {stage: [cores, replicas, batch_size]}
         self.stage_replicas = {}  # {stage: [{name: replica1_pod_name, ip: replica1_pod_ip}, ...]}
+        self.horizontal_stabilization = int(os.getenv("HORIZONTAL_STABILIZATION", 10))
+        self.horizontal_stabilization_counter = 0
         self.latency_models = load_pipeline_data(os.environ["LATENCY_MODELS"])
         self.dispatcher_sessions: Dict[int, ClientSession] = {} 
         self.k8s_namespace = os.environ["K8S_NAMESPACE"]
@@ -73,6 +75,7 @@ class Adapter:
             response = await response.json()
 
     async def adapt(self):
+        starting_time = time.perf_counter()
         async with self.prometheus_session.post(
             f"/api/v1/query",
             params={
@@ -81,9 +84,9 @@ class Adapter:
         ) as response:
             response = await response.json()
             try:
-                current_rps = int(response["data"]["result"]["value"][1])
+                current_rps = int(float(response["data"]["result"]["value"][1]))
             except TypeError:
-                current_rps = int(response["data"]["result"][0]["value"][1])
+                current_rps = int(float(response["data"]["result"][0]["value"][1]))
             
         now = datetime.now().timestamp()
         async with self.prometheus_session.post(
@@ -110,20 +113,27 @@ class Adapter:
             inp.append(max(history_rps[i:i+10]))
         history_rps = inp
         if len(history_rps) < 30:
-            next_10s_rps = current_rps
-            # FIXME
-        else:
-            next_10s_rps = self.predict(history_rps)
-            self.logger.info(f"adapter LSTM next_10s_rps without error considered: {next_10s_rps}")
+            history_rps = history_rps + (30 - len(history_rps)) * [history_rps[-1]]
+
+        next_10s_rps = self.predict(history_rps)
         
         new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
         future_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, next_10s_rps)
+        
         should_apply_horizontal = True
         for i in range(len(new_horizontal_config)):
             if new_horizontal_config[i][0] < future_horizontal_config[i][0]:
                 should_apply_horizontal = False
                 break
-        
+        self.logger.info(
+            f"{current_rps=}, {next_10s_rps=}, new_h_cfg={json.dumps(new_horizontal_config)}, future_h_cfg={json.dumps(future_horizontal_config)}, stabilization_counter={self.horizontal_stabilization_counter}"
+        )
+        if should_apply_horizontal:
+            if self.horizontal_stabilization_counter < self.horizontal_stabilization:
+                self.horizontal_stabilization_counter += 1
+                return
+            
+        self.horizontal_stabilization_counter = 0
         
         loop = asyncio.get_event_loop()
         
@@ -177,8 +187,10 @@ class Adapter:
             if new_stage_batch_size != prev_stage_batch_size:
                 update_dispatchers_tasks.append(self.update_batch(i, new_stage_batch_size))
         
+        self.logger.info(f"Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
+        self.logger.info(f"The reconfiguration took {time.perf_counter() - starting_time}s")
                 
     async def create_pod(self, stage_idx, cpu: int):
         new_pod_name = f"{self.base_pod_names[stage_idx]}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=5))}"
@@ -263,7 +275,7 @@ class Adapter:
         
         history_5m = tf.convert_to_tensor(np.array(history_10m_rps).reshape((-1, 30, 1)), dtype=tf.float32)
         next_10s = self.lstm_model.predict(history_5m)
-        self.logger.info(f"LSTM predict took {time.perf_counter() - t} seconds")
+        self.logger.info(f"LSTM predict took {time.perf_counter() - t} seconds - prediction: {int(next_10s)}")
         return int(next_10s)
 
 
