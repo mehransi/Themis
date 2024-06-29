@@ -20,6 +20,8 @@ class Dispatcher:
         self.queue = asyncio.Queue()  # might consider PriorityQueue for EDF
         self.event = asyncio.Event()
         self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
+
         
     
     async def initialize(self, data: dict):
@@ -61,6 +63,7 @@ class Dispatcher:
         self.is_free = {k: v for k, v in self.is_free.items() if k not in deleted_backends}
         self.sessions = {k: v for k, v in self.sessions.items() if k not in deleted_backends}
         self.idx = 0
+        self.logger.info(f"new backends={json.dumps(self.backend_names)}")
 
     
     async def receive(self, data: dict):
@@ -68,7 +71,10 @@ class Dispatcher:
         await self.queue.put({f"arrival-{self.dispatcher_name}": time.time(), **data})
         if self.queue.qsize() < self.batch_size:
             return {"received": True}
-        self.event.set()
+        
+        for _ in range(self.queue.qsize() // self.batch_size):
+            self.event.set()
+            await asyncio.sleep(0.002)
         return {"scheduled": True}
 
 
@@ -155,4 +161,4 @@ if os.getenv("EXPORT_REQUESTS_TOTAL"):
 app.add_routes(routes)
 
 if __name__ == '__main__':
-    web.run_app(app, host="0.0.0.0", port=int(os.getenv("DISPATCHER_PORT", 8002)))
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("DISPATCHER_PORT", 8002)), access_log=None)

@@ -44,6 +44,7 @@ class Adapter:
         self.lstm_model = None
         self.prometheus_session = None
         self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
     
     async def initialize(self, data: dict):
         self.lstm_model = saving.load_model(os.environ["LSTM_MODEL"])
@@ -117,6 +118,7 @@ class Adapter:
 
         next_10s_rps = self.predict(history_rps)
         
+        before_horizontal_time = time.perf_counter()
         new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
         future_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, next_10s_rps)
         
@@ -126,7 +128,7 @@ class Adapter:
                 should_apply_horizontal = False
                 break
         self.logger.info(
-            f"{current_rps=}, {next_10s_rps=}, new_h_cfg={json.dumps(new_horizontal_config)}, future_h_cfg={json.dumps(future_horizontal_config)}, stabilization_counter={self.horizontal_stabilization_counter}"
+            f"{current_rps=}, {next_10s_rps=}, new_h_cfg={json.dumps(new_horizontal_config)}, future_h_cfg={json.dumps(future_horizontal_config)}, stabilization_counter={self.horizontal_stabilization_counter}, horizontal_2d_took={time.perf_counter() - before_horizontal_time}"
         )
         if should_apply_horizontal:
             if self.horizontal_stabilization_counter < self.horizontal_stabilization:
@@ -139,8 +141,10 @@ class Adapter:
         
         if should_apply_horizontal is False:
             tasks = []
+            before_vertical_time = time.perf_counter()
             new_vertical_config = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             new_state = {}
+            before_pod_update_time = time.perf_counter()
             for i in range(len(new_vertical_config)):
                 new_state[i] = [new_vertical_config[i][0], self.current_state[i][1], new_vertical_config[i][1]]
                 if new_vertical_config[i][0] != self.current_state[i][0]:
@@ -149,9 +153,13 @@ class Adapter:
                             self.update_pod(r, i, new_vertical_config[i][0])
                         )
             await asyncio.gather(*tasks)
+            self.logger.info(
+                f"vertical_config={json.dumps(new_vertical_config)}, vertical_2d_took={time.perf_counter() - before_vertical_time}, updating_pods_took={time.perf_counter() - before_pod_update_time}"
+            )
         else:
             tasks = []
             new_state = {}
+            before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
                 new_state[i] = [1, new_horizontal_config[i][0], new_horizontal_config[i][1]]
                 
@@ -176,9 +184,11 @@ class Adapter:
                             )
                         )                    
             await asyncio.gather(*tasks)
+            self.logger.info(f"horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time}")
         
         
         update_dispatchers_tasks = []
+        before_updating_dispatchers_time = time.perf_counter()
         for i in range(len(self.current_state)):
             if should_apply_horizontal:
                 update_dispatchers_tasks.append(self.reset_backends(i, self.stage_replicas[i]))
@@ -190,7 +200,7 @@ class Adapter:
         self.logger.info(f"Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
-        self.logger.info(f"The reconfiguration took {time.perf_counter() - starting_time}s")
+        self.logger.info(f"reconfiguration_took {time.perf_counter() - starting_time}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time}")
                 
     async def create_pod(self, stage_idx, cpu: int):
         new_pod_name = f"{self.base_pod_names[stage_idx]}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=5))}"
