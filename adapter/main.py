@@ -128,7 +128,7 @@ class Adapter:
                 should_apply_horizontal = False
                 break
         self.logger.info(
-            f"{current_rps=}, {next_10s_rps=}, new_h_cfg={json.dumps(new_horizontal_config)}, future_h_cfg={json.dumps(future_horizontal_config)}, stabilization_counter={self.horizontal_stabilization_counter}, horizontal_2d_took={time.perf_counter() - before_horizontal_time}"
+            f"{current_rps=}, {next_10s_rps=}, new_h_cfg={json.dumps(new_horizontal_config)}, future_h_cfg={json.dumps(future_horizontal_config)}, stabilization_counter={self.horizontal_stabilization_counter}, horizontal_2d_took={time.perf_counter() - before_horizontal_time:.2f}"
         )
         if should_apply_horizontal:
             if self.horizontal_stabilization_counter < self.horizontal_stabilization:
@@ -154,7 +154,7 @@ class Adapter:
                         )
             await asyncio.gather(*tasks)
             self.logger.info(
-                f"vertical_config={json.dumps(new_vertical_config)}, vertical_2d_took={time.perf_counter() - before_vertical_time}, updating_pods_took={time.perf_counter() - before_pod_update_time}"
+                f"vertical_config={json.dumps(new_vertical_config)}, vertical_2d_took={time.perf_counter() - before_vertical_time:.2f}, updating_pods_took={time.perf_counter() - before_pod_update_time:.2f}"
             )
         else:
             tasks = []
@@ -184,7 +184,7 @@ class Adapter:
                             )
                         )                    
             await asyncio.gather(*tasks)
-            self.logger.info(f"horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time}")
+            self.logger.info(f"horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time:.2f}")
         
         
         update_dispatchers_tasks = []
@@ -200,7 +200,7 @@ class Adapter:
         self.logger.info(f"Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
-        self.logger.info(f"reconfiguration_took {time.perf_counter() - starting_time}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time}")
+        self.logger.info(f"reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
                 
     async def create_pod(self, stage_idx, cpu: int):
         new_pod_name = f"{self.base_pod_names[stage_idx]}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=5))}"
@@ -285,7 +285,7 @@ class Adapter:
         
         history_5m = tf.convert_to_tensor(np.array(history_10m_rps).reshape((-1, 30, 1)), dtype=tf.float32)
         next_10s = self.lstm_model.predict(history_5m)
-        self.logger.info(f"LSTM predict took {time.perf_counter() - t} seconds - prediction: {int(next_10s)}")
+        self.logger.info(f"LSTM predict took {time.perf_counter() - t:.2f} seconds - prediction: {int(next_10s)}")
         return int(next_10s)
 
 
