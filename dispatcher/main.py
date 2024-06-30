@@ -18,10 +18,8 @@ class Dispatcher:
         self.backend_names = []
         self.batch_size = None
         self.queue = asyncio.Queue()  # might consider PriorityQueue for EDF
-        self.event = asyncio.Event()
         self.logger = logging.getLogger()
-        self.logger.setLevel(logging.INFO)
-
+        logging.basicConfig(level = logging.INFO)
         
     
     async def initialize(self, data: dict):
@@ -41,7 +39,7 @@ class Dispatcher:
     def reset_batch_size(self, data: dict):
         if data.get("batch_size"):
             self.batch_size = int(data["batch_size"])
-            self.logger.info("New batch size:", self.batch_size)
+            self.logger.info(f"New batch size={self.batch_size}")
     
     async def reset_backends(self, data: dict):
         for backend in data["backends"]:
@@ -69,14 +67,8 @@ class Dispatcher:
     async def receive(self, data: dict):
         self.total_requests += 1
         await self.queue.put({f"arrival-{self.dispatcher_name}": time.time(), **data})
-        if self.queue.qsize() < self.batch_size:
-            return {"received": True}
-        
-        for _ in range(self.queue.qsize() // self.batch_size):
-            self.event.set()
-            await asyncio.sleep(0.002)
-        return {"scheduled": True}
-
+        return {"received": True}
+   
 
     def select_backend_to_dispatch(self):
         backend_name = None
@@ -92,9 +84,7 @@ class Dispatcher:
 
     async def dispatch(self):
         while True:
-            await self.event.wait()
-            self.event.clear()
-            backend_name = self.select_backend_to_dispatch()
+            await asyncio.sleep(0.002)
             batch = []
             if self.queue.qsize() >= self.batch_size:
                 for _ in range(self.batch_size):
@@ -102,15 +92,15 @@ class Dispatcher:
                     qd[f"leaving-{self.dispatcher_name}"] = time.time()
                     batch.append(qd)
             else:
-                pass # Fixme
-
+                continue
+            
+            backend_name = self.select_backend_to_dispatch()
             session: ClientSession = self.sessions[backend_name]
             self.is_free[backend_name] = False
             async with session.post(f"{self.url_path}", data=json.dumps(batch)) as response:
                 response = await response.text()
                 self.is_free[backend_name] = True
                 
-
 
 dispatcher = Dispatcher()
 
