@@ -59,7 +59,7 @@ def horizontal_2d(b_max, slo, models, workload):
         while counter >= 0:
             res[counter] = [best[counter][ind][1], best[counter][ind][2]]
             # best[ind] = total core, current core, current batch
-            ind -= latency(best[counter][ind][1], best[counter][ind][2], models[counter][0], models[counter][1],
+            ind -= latency(1, best[counter][ind][2], models[counter][0], models[counter][1],
                            models[counter][2], models[counter][3])
             counter -= 1
     return res
@@ -117,7 +117,7 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
             return -1
         left, right = 1, workload
         while right - left > 1:
-            mid = (right - left) // 2
+            mid = (right + left) // 2
             if vertical_2d(b_max, c_max, slo, models, current_instance, mid, depth + 1) == -1:
                 right = mid
             else:
@@ -137,11 +137,15 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
 
 
 if __name__ == "__main__":
-    batch_max = 10
-    core_max = 10
-    slo_max = 10
-    models_set = {0: [1, 1, 1, 1], 1: [1, 1, 1, 1]}
-    current_workload = 10
+    batch_max = 8
+    core_max = 8
+    slo_max = 1000
+    models_set = {0: [84.77978914419758, 21.867603656295096, 0.3475406625080165, -3.3934556468994534],
+                  1: [61.4976951513907, 3.815267577294629, 14.901415567121793, 11.041543118691706]}
+    # print(latency(1, 1, models_set[0][0], models_set[0][1], models_set[0][2], models_set[0][3]))
+    # print(latency(1, 1, models_set[1][0], models_set[1][1], models_set[1][2], models_set[1][3]))
+
+    current_workload = 66
     config_current = {0: [1, 1, 1], 1: [1, 1, 1]}
     start = datetime.datetime.now()
     config_vertical = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, current_workload)
