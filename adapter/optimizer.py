@@ -58,9 +58,9 @@ def horizontal_2d(b_max, slo, models, workload):
         counter = len(models) - 1
         while counter >= 0:
             res[counter] = [best[counter][ind][1], best[counter][ind][2]]
-            # best[ind] = total core, current core, current batch
-            ind -= latency(1, best[counter][ind][2], models[counter][0], models[counter][1],
-                           models[counter][2], models[counter][3])
+            # best[ind] = total core, current instance, current batch
+            ind -= (latency(1, best[counter][ind][2], models[counter][0], models[counter][1],
+                            models[counter][2], models[counter][3]) + int((best[counter][ind][2] - 1) * 1000 / workload))
             counter -= 1
     return res
 
@@ -118,7 +118,7 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
         left, right = 1, workload
         while right - left > 1:
             mid = (right + left) // 2
-            if vertical_2d(b_max, c_max, slo, models, current_instance, mid, depth + 1) == -1:
+            if vertical_2d(b_max, c_max, slo, models, current_instance, mid, 2) == -1:
                 right = mid
             else:
                 left = mid
@@ -130,8 +130,8 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
         while counter >= 0:
             res[counter] = [best[counter][ind][1], best[counter][ind][2]]
             # best[ind] = total core, current core, current batch
-            ind -= latency(best[counter][ind][1], best[counter][ind][2], models[counter][0], models[counter][1],
-                           models[counter][2], models[counter][3])
+            ind -= (latency(best[counter][ind][1], best[counter][ind][2], models[counter][0], models[counter][1],
+                            models[counter][2], models[counter][3]) + int((best[counter][ind][2] - 1) * 1000 / workload))
             counter -= 1
     return res
 
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     start = datetime.datetime.now()
     config_vertical = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, current_workload)
     if type(config_vertical) is int:
+        print(config_vertical, current_workload - config_vertical)
         config_vertical_limited = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, config_vertical)
         config_horizontal_limited = horizontal_2d(batch_max, slo_max, models_set, current_workload - config_vertical)
         print('Hardware Limited Reached: Vertical:', config_vertical_limited)
