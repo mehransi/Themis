@@ -23,7 +23,7 @@ batch_sizes = list(map(lambda x: x["batch"], training_data))
 latencies = list(map(lambda x: x["latency"] * 1000, training_data)) # ms
 
 params, _ = curve_fit(batch_cost_latency_model, (cpu_sizes, batch_sizes), latencies)
-alpha, beta, gamma, zeta = params  # eq 2 parameters
+alpha, beta, gamma, zeta = params
 
 
 with open(f"{os.path.dirname(__file__)}/models/{model}/parameters.json", "w") as f:
@@ -32,7 +32,7 @@ with open(f"{os.path.dirname(__file__)}/models/{model}/parameters.json", "w") as
 b = []
 l = []
 rl = []
-CPU = 5
+CPU = 6
 for d in profiling_data:
     if d["cpu"] == CPU:
         l.append(d["latency"] * 1000)

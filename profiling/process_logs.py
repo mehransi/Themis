@@ -15,7 +15,7 @@ if __name__ == "__main__":
     profiling_data = []
     for cpu in range(1, 11):
         for batch in range(1, 11):
-            with open(f"{data_dir}/{SOURCE}_latencies_core{cpu}_batch{batch}.json") as f:
+            with open(f"{data_dir}/data/{SOURCE}_latencies_core{cpu}_batch{batch}.json") as f:
                 latencies = json.load(f)
                 latencies = list(map(lambda x: x["e2e"], latencies))
                 latency = np.percentile(latencies, 95)

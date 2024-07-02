@@ -102,14 +102,17 @@ if __name__ == "__main__":
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})
-            for repeat in range(128 // batch + batch):
+            for repeat in range(512 // batch + 2 * batch):
                 t = time.perf_counter()
                 response = requests.post(f"http://{pod_ip}:{PORT}/infer", data=json.dumps(batch_input))
                 t = time.perf_counter() - t
-            print(t, response.text)
+            print(t, response.text, "cpu:", cpu, "batch:", batch)
             time.sleep(3)
-            requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/write", data=json.dumps({"filename": f"{log_file_path}/{SOURCE_NAME}_latencies_core{cpu}_batch{batch}.json"}))
-            time.sleep(2)
+            requests.post(
+                f"http://{EXPORTER_IP}:{EXPORTER_PORT}/write",
+                data=json.dumps({"cpu": cpu, "batch": batch})
+            )
+            time.sleep(3)
     
     
     delete_pod(POD_NAME, namespace)
