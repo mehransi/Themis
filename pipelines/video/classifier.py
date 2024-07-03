@@ -18,7 +18,13 @@ class Classifier(ModelServer):
         model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         model.eval()
         self.preprocessor = ResNet18_Weights.IMAGENET1K_V1.transforms()
+        self.__example_image = Image.open("./zidane.jpg")
         return model
+    
+    def warmup(self):
+        im = self.preprocessor(self.__example_image)
+        im = im.unsqueeze(0)
+        self.model(im)
     
     def preprocess(self, data):
         decoded = base64.b64decode(data)

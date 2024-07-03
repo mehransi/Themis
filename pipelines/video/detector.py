@@ -14,11 +14,17 @@ from model_server import ModelServer, add_base_routes
 class Detector(ModelServer):
     
     def load_model(self):
-        return torch.hub.load(
+        model = torch.hub.load(
             "ultralytics/yolov5",
             "custom",
             path="./yolov5n.pt",
         )
+        self.__example_image = Image.open("./zidane.jpg")
+        return model
+        
+    def warmup(self):
+        im = np.array(self.__example_image)
+        self.model(im)
     
     def preprocess(self, data):
         decoded = base64.b64decode(data)

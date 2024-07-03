@@ -1,3 +1,4 @@
 *.pth
 *.pt
+*.jpg
 model_server.py

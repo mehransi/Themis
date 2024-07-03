@@ -13,6 +13,9 @@ class SentimentAnalysis(ModelServer):
             task="sentiment-analysis", model="Souvikcmsa/SentimentAnalysisDistillBERT"
         )
         return model
+    
+    def warmup(self):
+        self.model(["nor is mister cultar's manner less interesting than his matter"])
 
 
 model_server = SentimentAnalysis()

@@ -22,9 +22,13 @@ class ModelServer:
             timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30))),
             connector=TCPConnector(limit=0)
         )
+        self.warmup()
 
     def load_model(self):
         raise NotImplementedError
+    
+    def warmup(self):
+        pass
     
     def preprocess(self, data):
         return data
