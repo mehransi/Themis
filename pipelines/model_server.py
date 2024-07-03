@@ -16,13 +16,17 @@ class ModelServer:
         self.model = None
     
     async def initialize(self):
+        t = time.perf_counter()
         self.model = self.load_model()
+        print("model loading time", self.__class__.__name__, time.perf_counter() - t)
         self.session = ClientSession(
             base_url=f"http://{self.next_target_endpoint}",
             timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30))),
             connector=TCPConnector(limit=0)
         )
+        t = time.perf_counter()
         self.warmup()
+        print("warmup took:", self.__class__.__name__, time.perf_counter() - t)
 
     def load_model(self):
         raise NotImplementedError
