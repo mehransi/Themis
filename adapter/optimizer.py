@@ -83,7 +83,7 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
                         if i + curr_latency > slo:
                             continue
                         throughput = int(1000 * b / curr_latency)
-                        if throughput * current_instance[s][0] < workload:
+                        if throughput * current_instance[s][1] < workload:
                             continue
                         # The first model
                         if s == 0:
