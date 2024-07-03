@@ -10,5 +10,6 @@ RUN pip install aiohttp==3.9.5
 COPY resnet18-f37072fd.pth /root/.cache/torch/hub/checkpoints/resnet18-f37072fd.pth
 COPY model_server.py model_server.py
 COPY classifier.py classifier.py
+COPY zidane.jpg zidane.jpg
 
 ENTRYPOINT ["python", "classifier.py"]

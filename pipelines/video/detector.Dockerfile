@@ -13,5 +13,6 @@ RUN pip install gitpython==3.1.43
 COPY yolov5n.pt yolov5n.pt
 COPY model_server.py model_server.py
 COPY detector.py detector.py
+COPY zidane.jpg zidane.jpg
 
 ENTRYPOINT ["python", "detector.py"]

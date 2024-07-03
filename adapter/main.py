@@ -156,10 +156,10 @@ class Adapter:
                         tasks.append(
                             self.update_pod(r, i, new_vertical_config[i][0])
                         )
-                for _ in extra_instances[i]:
+                for _ in range(extra_instances[i]):
                     tasks.append(
-                            asyncio.create_task(self.create_pod(i, new_vertical_config[i][0]))
-                        )
+                        asyncio.create_task(self.create_pod(i, new_vertical_config[i][0]))
+                    )
                 
             await asyncio.gather(*tasks)
             self.logger.info(
