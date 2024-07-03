@@ -109,9 +109,10 @@ def deploy_adapter(classifier_dispatcher_ip):
                     "DECISION_INTERVAL": "1",
                     "HORIZONTAL_STABILIZATION": "10",
                     "K8S_IN_CLUSTER_CLIENT": "true",
+                    "PYTHONUNBUFFERED": "1",
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": 8,
-                    "MAX_CPU_CORES": 20,
+                    "MAX_CPU_CORES": 8,
                     "LATENCY_SLO": 1300,
                     "BASE_POD_NAMES": json.dumps({0: VIDEO_DETECTOR, 1: VIDEO_CLASSIFIER}),
                     "LATENCY_MODELS": json.dumps({
@@ -133,7 +134,8 @@ def deploy_adapter(classifier_dispatcher_ip):
                                 "NEXT_TARGET_ENDPOINT": f"{classifier_dispatcher_ip}:{DISPATCHER_PORT}",
                                 "PORT": f"{DETECTOR_PORT}",
                                 "URL_PATH": "/predict",
-                                "YOLO_OFFLINE": "true"
+                                "YOLO_OFFLINE": "true",
+                                "PYTHONUNBUFFERED": "1",
                             },
                             "container_ports": [DETECTOR_PORT],
                         },
@@ -142,7 +144,7 @@ def deploy_adapter(classifier_dispatcher_ip):
                             "image": "mehransi/main:pelastic-video-classifier",
                             "request_mem": "1G",
                             "limit_mem": "1G",
-                            "env_vars": {"NEXT_TARGET_ENDPOINT": f"{EXPORTER_IP}:{EXPORTER_PORT}", "PORT": f"{CLASSIFIER_PORT}"},
+                            "env_vars": {"NEXT_TARGET_ENDPOINT": f"{EXPORTER_IP}:{EXPORTER_PORT}", "PORT": f"{CLASSIFIER_PORT}", "PYTHONUNBUFFERED": "1",},
                             "container_ports": [CLASSIFIER_PORT],
                         }
                     })

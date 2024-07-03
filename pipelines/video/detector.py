@@ -14,11 +14,7 @@ from model_server import ModelServer, add_base_routes
 class Detector(ModelServer):
     
     def load_model(self):
-        model = torch.hub.load(
-            "ultralytics/yolov5",
-            "custom",
-            path="./yolov5n.pt",
-        )
+        model = torch.hub.load('./ultralytics_yolov5_master', 'custom', path='./yolov5n.pt', source='local')
         self.__example_image = Image.open("./zidane.jpg")
         return model
         
