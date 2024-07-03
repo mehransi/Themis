@@ -112,7 +112,7 @@ def deploy_adapter(classifier_dispatcher_ip):
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": 8,
                     "MAX_CPU_CORES": 20,
-                    "LATENCY_SLO": 1000,
+                    "LATENCY_SLO": 1300,
                     "BASE_POD_NAMES": json.dumps({0: VIDEO_DETECTOR, 1: VIDEO_CLASSIFIER}),
                     "LATENCY_MODELS": json.dumps({
                         0: [148.81709977526535, 37.49369666805188, 5.432908755854746, -15.475937098807677],
