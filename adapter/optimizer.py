@@ -1,4 +1,3 @@
-import datetime
 import math
 
 TOTAL_CORE = 32
@@ -58,9 +57,8 @@ def horizontal_2d(b_max, slo, models, workload):
         counter = len(models) - 1
         while counter >= 0:
             res[counter] = [best[counter][ind][1], best[counter][ind][2]]
-            # best[ind] = total core, current instance, current batch
-            ind -= (latency(1, best[counter][ind][2], models[counter][0], models[counter][1],
-                            models[counter][2], models[counter][3]) + int((best[counter][ind][2] - 1) * 1000 / workload))
+            ind -= (latency(1, best[counter][ind][2], models[counter][0], models[counter][1], models[counter][2],
+                            models[counter][3]) + int((best[counter][ind][2] - 1) * 1000 / workload))
             counter -= 1
     return res
 
@@ -114,26 +112,38 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
     res = {}
     if ind == -1:
         if depth != 1:
-            return -1
+            return -1, []
         left, right = 1, workload
         while right - left > 1:
             mid = (right + left) // 2
-            if vertical_2d(b_max, c_max, slo, models, current_instance, mid, 2) == -1:
+            rec, _ = vertical_2d(b_max, c_max, slo, models, current_instance, mid, 2)
+            if rec == -1:
                 right = mid
             else:
                 left = mid
-        return left
+        config_vertical_limited, _ = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, left)
+        wl = current_workload - left
+        current_extra = {}
+        mehran_list = []
+        for x in range(len(models_set)):
+            cl = latency(config_vertical_limited[x][0], config_vertical_limited[x][1],
+                         models_set[x][0], models_set[x][1], models_set[x][2], models_set[x][3])
+            cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
+            th = int(1000 * config_vertical_limited[x][1] / cl)
+            current_extra[x] = [config_vertical_limited[x][0], math.ceil(wl / th), config_vertical_limited[x][1]]
+            mehran_list.append(math.ceil(wl / th))
+        return config_vertical_limited, mehran_list
     elif ind != -1 and depth != 1:
-        return 0
+        return 0, []
     else:
         counter = len(models) - 1
         while counter >= 0:
             res[counter] = [best[counter][ind][1], best[counter][ind][2]]
-            # best[ind] = total core, current core, current batch
             ind -= (latency(best[counter][ind][1], best[counter][ind][2], models[counter][0], models[counter][1],
-                            models[counter][2], models[counter][3]) + int((best[counter][ind][2] - 1) * 1000 / workload))
+                            models[counter][2], models[counter][3])
+                    + int((best[counter][ind][2] - 1) * 1000 / workload))
             counter -= 1
-    return res
+    return res, [0] * len(models)
 
 
 if __name__ == "__main__":
@@ -142,24 +152,15 @@ if __name__ == "__main__":
     slo_max = 1000
     models_set = {0: [84.77978914419758, 21.867603656295096, 0.3475406625080165, -3.3934556468994534],
                   1: [61.4976951513907, 3.815267577294629, 14.901415567121793, 11.041543118691706]}
-    # print(latency(1, 1, models_set[0][0], models_set[0][1], models_set[0][2], models_set[0][3]))
-    # print(latency(1, 1, models_set[1][0], models_set[1][1], models_set[1][2], models_set[1][3]))
 
-    current_workload = 66
+    current_workload = 30
     config_current = {0: [1, 1, 1], 1: [1, 1, 1]}
-    start = datetime.datetime.now()
-    config_vertical = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, current_workload)
-    if type(config_vertical) is int:
-        print(config_vertical, current_workload - config_vertical)
-        config_vertical_limited = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, config_vertical)
-        config_horizontal_limited = horizontal_2d(batch_max, slo_max, models_set, current_workload - config_vertical)
-        print('Hardware Limited Reached: Vertical:', config_vertical_limited)
-        print('Hardware Limited Reached: Horizontal:', config_horizontal_limited)
-    start = datetime.datetime.now()
+    config_vertical, extra_instances = vertical_2d(batch_max, core_max, slo_max,
+                                                   models_set, config_current, current_workload)
     config_horizontal = horizontal_2d(batch_max, slo_max, models_set, current_workload)
     print('Current Config: {MODEL: CORE, INSTANCE, BATCH}')
     print(config_current)
     print('Horizontal Config: {MODEL: [INSTANCE, BATCH]}')
     print(config_horizontal)
-    print('Vertical Config: {MODEL: [CORE, BATCH]}')
-    print(config_vertical)
+    print('Vertical Config: {MODEL: [CORE, BATCH]}, Extra: [INSTANCE]')
+    print(config_vertical, extra_instances)
