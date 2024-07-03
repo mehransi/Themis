@@ -139,22 +139,31 @@ class Adapter:
         
         loop = asyncio.get_event_loop()
         
+        extra_pods_added_during_vertical = False
+        
         if should_apply_horizontal is False:
             tasks = []
             before_vertical_time = time.perf_counter()
-            new_vertical_config = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
+            new_vertical_config, extra_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             new_state = {}
             before_pod_update_time = time.perf_counter()
             for i in range(len(new_vertical_config)):
-                new_state[i] = [new_vertical_config[i][0], self.current_state[i][1], new_vertical_config[i][1]]
+                if extra_instances[i] > 0:
+                    extra_pods_added_during_vertical = True
+                new_state[i] = [new_vertical_config[i][0], self.current_state[i][1] + extra_instances[i], new_vertical_config[i][1]]
                 if new_vertical_config[i][0] != self.current_state[i][0]:
                     for r in self.stage_replicas[i]:
                         tasks.append(
                             self.update_pod(r, i, new_vertical_config[i][0])
                         )
+                for _ in extra_instances[i]:
+                    tasks.append(
+                            asyncio.create_task(self.create_pod(i, new_vertical_config[i][0]))
+                        )
+                
             await asyncio.gather(*tasks)
             self.logger.info(
-                f"vertical_config={json.dumps(new_vertical_config)}, vertical_2d_took={time.perf_counter() - before_vertical_time:.2f}, updating_pods_took={time.perf_counter() - before_pod_update_time:.2f}"
+                f"vertical_config={json.dumps(new_vertical_config)}, extra_instances={extra_instances} vertical_2d_took={time.perf_counter() - before_vertical_time:.2f}, updating_pods_took={time.perf_counter() - before_pod_update_time:.2f}"
             )
         else:
             tasks = []
@@ -176,6 +185,10 @@ class Adapter:
                     extra_pods_count = self.current_state[i][1] - new_horizontal_config[i][0]
                     extra_pods = self.stage_replicas[i][:extra_pods_count]
                     self.stage_replicas[i] = self.stage_replicas[i][extra_pods_count:]
+                    for r in self.stage_replicas[i]:
+                        tasks.append(
+                            asyncio.create_task(self.update_pod(r, i, 1))
+                        )
                     for r in extra_pods:
                         tasks.append(
                             loop.run_in_executor(
@@ -190,7 +203,7 @@ class Adapter:
         update_dispatchers_tasks = []
         before_updating_dispatchers_time = time.perf_counter()
         for i in range(len(self.current_state)):
-            if should_apply_horizontal:
+            if should_apply_horizontal or extra_pods_added_during_vertical:
                 update_dispatchers_tasks.append(self.reset_backends(i, self.stage_replicas[i]))
             _, _, prev_stage_batch_size = self.current_state[i]
             _, _, new_stage_batch_size = new_state[i]
@@ -225,7 +238,7 @@ class Adapter:
                 break
             
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
             try:
                 await self.initialize_pod(f"{pod['pod_ip']}:{self.pod_ports[stage_idx]}", cpu)
                 break

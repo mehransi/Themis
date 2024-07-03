@@ -106,7 +106,8 @@ def deploy_adapter(classifier_dispatcher_ip):
                 "limit_cpu": "1",
                 "env_vars": {
                     "FIRST_DECIDE_DELAY_MINUTES": "1",
-                    "DECISION_INTERVAL": "5",
+                    "DECISION_INTERVAL": "1",
+                    "HORIZONTAL_STABILIZATION": "10",
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": 8,
