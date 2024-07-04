@@ -72,11 +72,13 @@ class Dispatcher:
         return {"received": True}
    
 
-    def select_backend_to_dispatch(self):
+    async def select_backend_to_dispatch(self):
         backend_name = None
         while True:
             if self.is_free[self.backend_names[self.idx]]:
                 backend_name = self.backend_names[self.idx]
+            else:
+                await asyncio.sleep(0.001)
             self.idx = (self.idx + 1) % len(self.backend_names)
             if backend_name:
                 return backend_name
@@ -94,7 +96,7 @@ class Dispatcher:
                 qd[f"leaving-{self.dispatcher_name}"] = time.time()
                 batch.append(qd)
             
-            backend_name = self.select_backend_to_dispatch()
+            backend_name = await self.select_backend_to_dispatch()
             for q in batch:
                 q[f"backend-{self.dispatcher_name}"] = backend_name
             session: ClientSession = self.sessions[backend_name]
