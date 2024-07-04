@@ -12,8 +12,10 @@ class Dispatcher:
         self.is_free = {}
         self.backend_port = None
         self.url_path = os.getenv("URL_PATH", "/infer")
+        self.latency_slo = os.environ["LATENCY_SLO"] # ms
         self.idx = 0
         self.total_requests = 0
+        self.total_dropped = 0
         self.dispatcher_name = None
         self.sessions = {}
         self.backend_names = []
@@ -85,13 +87,13 @@ class Dispatcher:
             try:
                 await asyncio.sleep(0.002)
                 batch = []
-                if self.queue.qsize() >= self.batch_size:
-                    for _ in range(self.batch_size):
-                        qd = await self.queue.get()
-                        qd[f"leaving-{self.dispatcher_name}"] = time.time()
-                        batch.append(qd)
-                else:
-                    continue
+                while len(batch) < self.batch_size:
+                    qd = await self.queue.get()
+                    if time.time() - qd[f"arrival-{self.dispatcher_name}"] >= self.latency_slo:
+                        self.total_dropped += 1
+                        continue
+                    qd[f"leaving-{self.dispatcher_name}"] = time.time()
+                    batch.append(qd)
                 
                 backend_name = self.select_backend_to_dispatch()
                 for q in batch:
@@ -103,7 +105,7 @@ class Dispatcher:
                     self.logger.info(f"datetime={str(datetime.now())}, response={str(response)}, backend={backend_name}, base={session._base_url}, batch={len(batch)}")
                     self.is_free[backend_name] = True
             except Exception as e:
-                self.logger.error(str(datetime.now()), e, backend_name, session._base_url, len(batch))
+                self.logger.error(str(datetime.now()), str(e), backend_name, str(session._base_url), len(batch))
                 
 
 dispatcher = Dispatcher()
@@ -139,6 +141,10 @@ async def export_request_count(request):
     content += "# TYPE dispatcher_requests_total counter\n"
     if dispatcher.dispatcher_name:
         content += f'dispatcher_requests_total {dispatcher.total_requests}\n'
+    content += "# HELP dispatcher_dropped_total Total number of dropped requests\n"
+    content += "# TYPE dispatcher_dropped_total counter\n"
+    if dispatcher.dispatcher_name:
+        content += f'dispatcher_dropped_total {dispatcher.total_dropped}\n'
     return web.Response(body=content)
 
 

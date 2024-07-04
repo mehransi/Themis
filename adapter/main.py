@@ -157,6 +157,7 @@ class Adapter:
             )
         else:
             tasks = []
+            futures = []
             new_state = {}
             before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
@@ -167,9 +168,8 @@ class Adapter:
                 
                 if new_horizontal_config[i][0] >= self.current_state[i][1]:
                     for r in self.stage_replicas[i]:
-                        tasks.append(
-                            asyncio.create_task(self.update_pod(r, i, 1))
-                        )
+                        futures.append(self.update_pod(r, i, 1))
+                    # TODO: create first, update then
                     for _ in range(new_horizontal_config[i][0] - self.current_state[i][1]):
                         tasks.append(
                             asyncio.create_task(self.create_pod(i, 1))
@@ -179,19 +179,19 @@ class Adapter:
                     extra_pods = self.stage_replicas[i][:extra_pods_count]
                     self.stage_replicas[i] = self.stage_replicas[i][extra_pods_count:]
                     for r in self.stage_replicas[i]:
-                        tasks.append(
-                            asyncio.create_task(self.update_pod(r, i, 1))
-                        )
+                        tasks.append(asyncio.create_task(self.update_pod(r, i, 1)))
                     self.logger.info(f"datetime={str(datetime.now())}, pods_to_delete_stage{i}={json.dumps(extra_pods)}")
                     self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
-                    for r in extra_pods:
-                        tasks.append(
+                    if extra_pods:
+                        await self.reset_backends(i, self.stage_replicas[i])
+                        for r in extra_pods:
                             loop.run_in_executor(
                                 None,
                                 lambda: delete_pod(r["name"], namespace=self.k8s_namespace)
                             )
-                        )
+                        
             await asyncio.gather(*tasks)
+            await asyncio.gather(*[asyncio.create_task(f) for f in futures])
             self.logger.info(f"datetime={str(datetime.now())}, horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time:.2f}")
         
         
@@ -200,7 +200,7 @@ class Adapter:
         for i in range(len(self.current_state)):
             _, prev_replicas, prev_batch_size = self.current_state[i]
             _, new_replicas, new_batch_size = new_state[i]
-            if prev_replicas != new_replicas:
+            if prev_replicas < new_replicas:  # for deleted replicas, we already resetted the backends
                 update_dispatchers_tasks.append(self.reset_backends(i, self.stage_replicas[i]))
             if new_batch_size != prev_batch_size:
                 update_dispatchers_tasks.append(self.update_batch(i, new_batch_size))
