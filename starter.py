@@ -44,7 +44,7 @@ def deploy_dispatchers():
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
-                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "EXPORT_REQUESTS_TOTAL": 1},
+                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "EXPORT_REQUESTS_TOTAL": 1},
                 "container_ports": [DISPATCHER_PORT],
             }
         ],
@@ -75,7 +75,7 @@ def deploy_dispatchers():
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
-                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}"},
+                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1"},
                 "container_ports": [DISPATCHER_PORT],
             }
         ],

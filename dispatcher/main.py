@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 from aiohttp import ClientSession, web, ClientTimeout, TCPConnector
 
 
@@ -46,8 +47,7 @@ class Dispatcher:
             if backend["name"] not in self.backend_names:
                 self.sessions[backend["name"]] = ClientSession(
                     base_url=f"http://{backend['ip']}:{self.backend_port}",
-                    timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30))),
-                    connector=TCPConnector(limit=0)
+                    timeout=ClientTimeout(total=int(os.getenv("TIMEOUT", 30)))
                 )
                 self.is_free[backend["name"]] = True
                 self.backend_names.append(backend["name"])
@@ -75,31 +75,35 @@ class Dispatcher:
         while True:
             if self.is_free[self.backend_names[self.idx]]:
                 backend_name = self.backend_names[self.idx]
-            self.idx += 1
-            if self.idx == len(self.backend_names):
-                self.idx = 0
+            self.idx = (self.idx + 1) % len(self.backend_names)
             if backend_name:
                 return backend_name
     
 
     async def dispatch(self):
         while True:
-            await asyncio.sleep(0.002)
-            batch = []
-            if self.queue.qsize() >= self.batch_size:
-                for _ in range(self.batch_size):
-                    qd = await self.queue.get()
-                    qd[f"leaving-{self.dispatcher_name}"] = time.time()
-                    batch.append(qd)
-            else:
-                continue
-            
-            backend_name = self.select_backend_to_dispatch()
-            session: ClientSession = self.sessions[backend_name]
-            self.is_free[backend_name] = False
-            async with session.post(f"{self.url_path}", data=json.dumps(batch)) as response:
-                response = await response.text()
-                self.is_free[backend_name] = True
+            try:
+                await asyncio.sleep(0.002)
+                batch = []
+                if self.queue.qsize() >= self.batch_size:
+                    for _ in range(self.batch_size):
+                        qd = await self.queue.get()
+                        qd[f"leaving-{self.dispatcher_name}"] = time.time()
+                        batch.append(qd)
+                else:
+                    continue
+                
+                backend_name = self.select_backend_to_dispatch()
+                for q in batch:
+                    q[f"backend-{self.dispatcher_name}"] = backend_name
+                session: ClientSession = self.sessions[backend_name]
+                self.is_free[backend_name] = False
+                async with session.post(f"{self.url_path}", data=json.dumps(batch)) as response:
+                    response = await response.text()
+                    self.logger.info(f"datetime={str(datetime.now())}, response={str(response)}, backend={backend_name}, base={session._base_url}, batch={len(batch)}")
+                    self.is_free[backend_name] = True
+            except Exception as e:
+                self.logger.error(str(datetime.now()), e, backend_name, session._base_url, len(batch))
                 
 
 dispatcher = Dispatcher()
