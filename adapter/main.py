@@ -8,6 +8,7 @@ import string
 import time
 import tensorflow as tf
 from aiohttp import ClientSession, web
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from tensorflow.keras import saving
 from typing import Dict, List
@@ -43,6 +44,7 @@ class Adapter:
         self.latency_slo = int(os.environ["LATENCY_SLO"])
         self.lstm_model = None
         self.prometheus_session = None
+        self.__thread_executor = ThreadPoolExecutor(max_workers=5 * len(self.latency_models))
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
     
@@ -186,7 +188,7 @@ class Adapter:
                         await self.reset_backends(i, self.stage_replicas[i])
                         for r in extra_pods:
                             loop.run_in_executor(
-                                None,
+                                self.__thread_executor,
                                 lambda: delete_pod(r["name"], namespace=self.k8s_namespace)
                             )
                         
@@ -216,7 +218,7 @@ class Adapter:
         loop = asyncio.get_event_loop()
         t = time.perf_counter()
         await loop.run_in_executor(
-            None,
+            self.__thread_executor,
             lambda: create_pod(
                 new_pod_name,
                 [{
@@ -232,7 +234,7 @@ class Adapter:
         t = time.perf_counter()
         while True:
             await asyncio.sleep(0.05)
-            pod = await loop.run_in_executor(None, lambda: get_pod(new_pod_name, namespace=self.k8s_namespace))
+            pod = await loop.run_in_executor(self.__thread_executor, lambda: get_pod(new_pod_name, namespace=self.k8s_namespace))
             if pod["pod_ip"] and pod["pod_ip"].lower() != "none":
                 break
         pod_wait_for_ip_time = time.perf_counter() - t
@@ -260,7 +262,7 @@ class Adapter:
     async def update_pod(self, pod_info: dict, stage_idx, new_cpu):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
-            None,
+            self.__thread_executor,
             lambda: update_pod(
                 pod_info["name"],
                 [{

@@ -26,6 +26,8 @@ EXPORTER_PORT = 8008
 DETECTOR_POD_LABELS = {"pipeline": "video", "component": "model-server", "stage": VIDEO_DETECTOR}
 CLASSIFIER_POD_LABELS = {"pipeline": "video", "component": "model-server", "stage": VIDEO_CLASSIFIER}
 
+LATENCY_SLO = 1300
+
 
 def deploy_dispatchers():
     detector_dispatcher_labels = {
@@ -44,7 +46,7 @@ def deploy_dispatchers():
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
-                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "EXPORT_REQUESTS_TOTAL": 1},
+                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "LATENCY_SLO": LATENCY_SLO, "EXPORT_REQUESTS_TOTAL": 1},
                 "container_ports": [DISPATCHER_PORT],
             }
         ],
@@ -75,7 +77,7 @@ def deploy_dispatchers():
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
-                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1"},
+                "env_vars": {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "LATENCY_SLO": LATENCY_SLO, "PYTHONUNBUFFERED": "1"},
                 "container_ports": [DISPATCHER_PORT],
             }
         ],
@@ -113,7 +115,7 @@ def deploy_adapter(classifier_dispatcher_ip):
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": 8,
                     "MAX_CPU_CORES": 8,
-                    "LATENCY_SLO": 1300,
+                    "LATENCY_SLO": LATENCY_SLO,
                     "BASE_POD_NAMES": json.dumps({0: VIDEO_DETECTOR, 1: VIDEO_CLASSIFIER}),
                     "LATENCY_MODELS": json.dumps({
                         0: [148.81709977526535, 37.49369666805188, 5.432908755854746, -15.475937098807677],
