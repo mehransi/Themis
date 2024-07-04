@@ -132,7 +132,6 @@ class Adapter:
         
         loop = asyncio.get_event_loop()
         
-        extra_pods_added_during_vertical = [False] * len(self.current_state)
         
         if should_apply_horizontal is False:
             tasks = []
@@ -141,8 +140,6 @@ class Adapter:
             new_state = {}
             before_pod_update_time = time.perf_counter()
             for i in range(len(new_vertical_config)):
-                if more_instances[i] > 0:
-                    extra_pods_added_during_vertical[i] = True
                 new_state[i] = [new_vertical_config[i][0], self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
                 if new_vertical_config[i][0] != self.current_state[i][0]:
                     for r in self.stage_replicas[i]:
@@ -164,6 +161,9 @@ class Adapter:
             before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
                 new_state[i] = [1, new_horizontal_config[i][0], new_horizontal_config[i][1]]
+                self.logger.info(f"datetime={str(datetime.now())}, Prev state {i}={json.dumps(self.current_state[i])} | New state {i}={json.dumps(new_state[i])}")
+                if new_state[i] == self.current_state[i]:
+                    continue
                 
                 if new_horizontal_config[i][0] >= self.current_state[i][1]:
                     for r in self.stage_replicas[i]:
@@ -198,12 +198,12 @@ class Adapter:
         update_dispatchers_tasks = []
         before_updating_dispatchers_time = time.perf_counter()
         for i in range(len(self.current_state)):
-            if should_apply_horizontal or extra_pods_added_during_vertical[i]:
+            _, prev_replicas, prev_batch_size = self.current_state[i]
+            _, new_replicas, new_batch_size = new_state[i]
+            if prev_replicas != new_replicas:
                 update_dispatchers_tasks.append(self.reset_backends(i, self.stage_replicas[i]))
-            _, _, prev_stage_batch_size = self.current_state[i]
-            _, _, new_stage_batch_size = new_state[i]
-            if new_stage_batch_size != prev_stage_batch_size:
-                update_dispatchers_tasks.append(self.update_batch(i, new_stage_batch_size))
+            if new_batch_size != prev_batch_size:
+                update_dispatchers_tasks.append(self.update_batch(i, new_batch_size))
         
         self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
