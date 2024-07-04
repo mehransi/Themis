@@ -12,7 +12,7 @@ class Dispatcher:
         self.is_free = {}
         self.backend_port = None
         self.url_path = os.getenv("URL_PATH", "/infer")
-        self.latency_slo = os.environ["LATENCY_SLO"] # ms
+        self.latency_slo = int(os.environ["LATENCY_SLO"]) # ms
         self.idx = 0
         self.total_requests = 0
         self.total_dropped = 0
@@ -26,7 +26,7 @@ class Dispatcher:
         
     
     async def initialize(self, data: dict):
-        asyncio.create_task(self.dispatch())
+        asyncio.create_task(self.main_loop())
         self.dispatcher_name = data["dispatcher_name"]
         self.backend_port = int(data["backends_port"])
         self.batch_size = data["batch_size"]
@@ -82,31 +82,31 @@ class Dispatcher:
                 return backend_name
     
 
-    async def dispatch(self):
+    async def main_loop(self):
         while True:
-            try:
-                await asyncio.sleep(0.002)
-                batch = []
-                while len(batch) < self.batch_size:
-                    qd = await self.queue.get()
-                    if time.time() - qd[f"arrival-{self.dispatcher_name}"] >= self.latency_slo:
-                        self.total_dropped += 1
-                        continue
-                    qd[f"leaving-{self.dispatcher_name}"] = time.time()
-                    batch.append(qd)
-                
-                backend_name = self.select_backend_to_dispatch()
-                for q in batch:
-                    q[f"backend-{self.dispatcher_name}"] = backend_name
-                session: ClientSession = self.sessions[backend_name]
-                self.is_free[backend_name] = False
-                async with session.post(f"{self.url_path}", data=json.dumps(batch)) as response:
-                    response = await response.text()
-                    self.logger.info(f"datetime={str(datetime.now())}, response={str(response)}, backend={backend_name}, base={session._base_url}, batch={len(batch)}")
-                    self.is_free[backend_name] = True
-            except Exception as e:
-                self.logger.error(str(datetime.now()), str(e), backend_name, str(session._base_url), len(batch))
-                
+            await asyncio.sleep(0.002)
+            batch = []
+            while len(batch) < self.batch_size:
+                qd = await self.queue.get()
+                if 1000 * (time.time() - qd[f"arrival-{self.dispatcher_name}"]) >= self.latency_slo:
+                    self.total_dropped += 1
+                    continue
+                qd[f"leaving-{self.dispatcher_name}"] = time.time()
+                batch.append(qd)
+            
+            backend_name = self.select_backend_to_dispatch()
+            for q in batch:
+                q[f"backend-{self.dispatcher_name}"] = backend_name
+            session: ClientSession = self.sessions[backend_name]
+            self.is_free[backend_name] = False
+            asyncio.create_task(self.dispatch(session, backend_name, batch))
+    
+    async def dispatch(self, session: ClientSession, backend_name, batch):
+        async with session.post(f"{self.url_path}", data=json.dumps(batch)) as response:
+            response = await response.text()
+            self.is_free[backend_name] = True
+            self.logger.info(f"datetime={str(datetime.now())}, response={str(response)}, backend={backend_name}, base={session._base_url}, batch={len(batch)}")
+        
 
 dispatcher = Dispatcher()
 
