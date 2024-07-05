@@ -93,6 +93,7 @@ def add_base_routes(app: web.Application, model_server: ModelServer):
     async def update_threads(request):
         req = await request.json()
         torch.set_num_threads(int(req["threads"]))
+        print("Torch updating threads:", req["threads"], torch.get_num_threads())
         return web.json_response({"success": True})
 
     async def infer(request):

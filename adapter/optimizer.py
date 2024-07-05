@@ -121,13 +121,13 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
                 right = mid
             else:
                 left = mid
-        config_vertical_limited, _ = vertical_2d(batch_max, core_max, slo_max, models_set, config_current, left)
-        wl = current_workload - left
+        config_vertical_limited, _ = vertical_2d(b_max, c_max, slo, models, current_instance, left)
+        wl = workload - left
         current_extra = {}
         mehran_list = []
-        for x in range(len(models_set)):
+        for x in range(len(models)):
             cl = latency(config_vertical_limited[x][0], config_vertical_limited[x][1],
-                         models_set[x][0], models_set[x][1], models_set[x][2], models_set[x][3])
+                         models[x][0], models[x][1], models[x][2], models[x][3])
             cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
             th = int(1000 * config_vertical_limited[x][1] / cl)
             current_extra[x] = [config_vertical_limited[x][0], math.ceil(wl / th), config_vertical_limited[x][1]]
