@@ -180,7 +180,11 @@ def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
 
 
 if __name__ == "__main__":
-    os.system(f"microk8s kubectl apply -f podmonitor.yaml")
+    prometheus_port = 32000
+    prometheus_container_name = "pelastic_prometheus"
+    # os.system(f"microk8s kubectl apply -f podmonitor.yaml")
+    os.system(f"microk8s config > ./prom/kube.config")
+    os.system(f"docker run --name {prometheus_container_name} -d -p {prometheus_port}:9090 -v ./prom:/etc/prometheus prom/prometheus")
     deploy_dispatchers()
 
     wait_till_pod_is_ready(f"{VIDEO_DETECTOR}-dispatcher", namespace)
@@ -192,10 +196,12 @@ if __name__ == "__main__":
     wait_till_pod_is_ready(ADAPTER_DEPLOY_NAME, namespace)
     adapter_ip = get_service(f"{ADAPTER_DEPLOY_NAME}-svc", namespace=namespace)["cluster_ip"]
     
-    prometheus_service = get_service("kube-prom-stack-kube-prome-prometheus", namespace="observability")
-    prometheus_endpoint = f"{prometheus_service['cluster_ip']}:{prometheus_service['port']}"
+    # prometheus_service = get_service("kube-prom-stack-kube-prome-prometheus", namespace="observability")
+    # prometheus_endpoint = f"{prometheus_service['cluster_ip']}:{prometheus_service['port']}"
     
-    time.sleep(5)
+    prometheus_endpoint = f"{os.environ['NODE_IP']}:{prometheus_port}"
+    
+    time.sleep(10)
     initialize_adapter(
         adapter_ip,
         prometheus_endpoint,
