@@ -39,7 +39,7 @@ def deploy_classifier(next_target_endpoint):
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
-                "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}"},
+                "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1",},
                 "container_ports": [PORT],
             }
         ],

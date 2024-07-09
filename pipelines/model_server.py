@@ -86,6 +86,7 @@ def add_base_routes(app: web.Application, model_server: ModelServer):
             req = await request.json()
             torch.set_num_interop_threads(int(os.getenv("INTEROP_THREADS", 1)))
             torch.set_num_threads(int(req["threads"]))
+            print(f"Torch parallelism threads: inter={torch.get_num_interop_threads()}, intra={torch.get_num_threads()}")
             await model_server.initialize()
             return web.json_response({"success": True})
         return web.json_response({"success": False, "message": "Already initialized."})

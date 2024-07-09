@@ -43,6 +43,7 @@ def deploy_classifier(next_target_endpoint, inter, intra, cpu):
                     "NEXT_TARGET_ENDPOINT": next_target_endpoint, 
                     "PORT": f"{PORT}", 
                     "INTEROP_THREADS": f"{inter}",
+                    "PYTHONUNBUFFERED": "1",
                 },
                 "container_ports": [PORT],
             }

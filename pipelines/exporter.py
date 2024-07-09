@@ -1,16 +1,20 @@
 
 from aiohttp import web
+from prometheus_client import start_http_server, Histogram
 
 
 class Exporter:
     def __init__(self) -> None:
-        pass
-
-    
+        self.e2e_histogram = Histogram('pelastic_requests_latency', 'End-to-end pipeline latency')
+        
     async def receive(self, data: dict):
-        # TODO: save latency metrics for exporter
-        print("Exporter received")
-        print(data)
+        # data["dispatcher-stage0"] = f'{data["leaving-stage-0"] - data["arrival-stage-0"]:.3f}'
+        # data["detector-e2e"] = f'{data["leaving-Detector"] - data["arrival-Detector"]:.3f}'
+        # data["dispatcher-stage1"] = f'{data["leaving-stage-1"] - data["arrival-stage-1"]:.3f}'
+        # data["classifier-e2e"] = f'{data["leaving-Classifier"] - data["arrival-Classifier"]:.3f}'
+        data["e2e"] = data["leaving-Classifier"] - data["arrival-stage-0"]
+        self.e2e_histogram.observe(data["e2e"])
+ 
         return {"saved": True}
 
 
@@ -22,19 +26,13 @@ async def receive(request):
     return web.json_response(await exporter.receive(data))
 
 
-async def export_metrics(request):
-    # TODO: export for Prometheus
-    content = ""
-    return web.Response(body=content)
-
-
 app = web.Application()
 app.add_routes(
     [
         web.post("/receive", receive),
-        web.get("/metrics", export_metrics),
     ]
 )
 
 if __name__ == '__main__':
+    start_http_server(8009)
     web.run_app(app, host="0.0.0.0", port=8008)

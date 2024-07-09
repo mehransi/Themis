@@ -8,7 +8,7 @@ scrape_configs:
     metrics_path: "/metrics"
     scrape_interval: 1s
     static_configs:
-      - targets: ["localhost:8008"]
+      - targets: ["localhost:8009"]
   - job_name: 'kubernetes-pods'
     scrape_interval: 1s
     kubernetes_sd_configs:

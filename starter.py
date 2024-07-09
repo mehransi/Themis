@@ -1,8 +1,22 @@
+import asyncio
+import base64
+import csv
+import cv2
 import requests
+import subprocess
 import json
 import os
 import sys
 import time
+
+from barazmoon import BarAzmoon
+from datetime import datetime
+from multiprocessing import Manager
+from threading import Thread, Event
+
+from utils import PrometheusClient
+
+
 
 os.system(f"mkdir -p {os.environ['HOME']}/.kube")
 os.system(f"microk8s config > {os.environ['HOME']}/.kube/config")
@@ -15,6 +29,8 @@ from utils import wait_till_pod_is_ready
 
 
 namespace = "mehran"
+GET_METRICS_INTERVAL = 1
+FIRST_DECIDE_DELAY_MINUTES = 1
 
 pipeline = sys.argv[1]
 
@@ -86,7 +102,7 @@ def deploy_adapter(next_target_endpoints: dict):
                 "limit_mem": "1G",
                 "limit_cpu": "1",
                 "env_vars": {
-                    "FIRST_DECIDE_DELAY_MINUTES": "1",
+                    "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
                     "DECISION_INTERVAL": "1",
                     "HORIZONTAL_STABILIZATION": "10",
                     "K8S_IN_CLUSTER_CLIENT": "true",
@@ -129,21 +145,87 @@ def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
         data=json.dumps({
             "prometheus_endpoint": prometheus_endpoint,
             "dispatcher_endpoints": dispatcher_endpoints,
-            "initial_pod_cpus": {0: 4, 1: 4}
+            "initial_pod_cpus": {0: 1, 1: 1}
         }),
         headers={'Content-type':'application/json', 'Accept':'application/json'}
     )
 
 
+def _get_value(prom_res, divide_by=1, should_round=True):
+        for tup in prom_res:
+            if tup[1] != "NaN":
+                v = float(tup[1]) / divide_by
+                if should_round:
+                    return round(v, 2)
+                return v
+        
+
+def query_metrics(prom_endpoint, event: Event):
+    async def get_metrics(prom: PrometheusClient):
+        loop = asyncio.get_event_loop()
+        percentiles = {
+            99: None, 95: None, 90: None, 50: None,
+        }
+        for pl in percentiles.keys():
+            percentiles[pl] = loop.run_in_executor(None, lambda: prom.get_instant(
+                f'histogram_quantile(0.{pl}, sum(rate(pelastic_requests_latency_bucket[{GET_METRICS_INTERVAL}s])) by (le))'
+            ))
+
+        cost = loop.run_in_executor(
+            None, lambda: prom.get_instant(f"sum(last_over_time(pelastic_cost[{GET_METRICS_INTERVAL}s]))")
+        )
+
+        rate = loop.run_in_executor(
+            None, lambda: prom.get_instant(f"sum(rate(dispatcher_requests_total[{GET_METRICS_INTERVAL}s]))")
+        )
+        
+        drop_rate = loop.run_in_executor(
+            None, lambda: prom.get_instant(f"sum(rate(dispatcher_dropped_total[{GET_METRICS_INTERVAL}s]))")
+        )
+        
+        cost = _get_value(await cost)
+        rate = _get_value(await rate, should_round=False)
+        drop_rate = _get_value(await drop_rate, should_round=False)
+        
+        for pl in percentiles.keys():
+            percentiles[pl] = _get_value(await percentiles[pl])
+        
+        return {
+            **percentiles,
+            "cost": cost,
+            "rate": rate,
+            "drop_rate": drop_rate,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    prom = PrometheusClient(prom_endpoint)
+    time.sleep(1)
+    while True:
+        if event.is_set():
+            break
+        time.sleep(GET_METRICS_INTERVAL)
+        metrics = asyncio.run(get_metrics(prom))
+        filepath = f"./series.csv"
+        file_exists = os.path.exists(filepath)
+        with open(filepath, "a") as f:
+            field_names = [
+                *list(metrics.keys())
+            ]
+            writer = csv.DictWriter(f, fieldnames=field_names)
+            if not file_exists:
+                writer.writeheader()
+
+            writer.writerow(
+                metrics
+            )
+
+
 if __name__ == "__main__":
+    os.system(f"microk8s kubectl create ns {namespace}")
     prometheus_port = 32000
     prometheus_container_name = "pelastic_prometheus"
     # os.system(f"microk8s kubectl apply -f podmonitor.yaml")
     os.system(f"microk8s config > ./prom/kube.config")
-    os.system(f"docker stop {prometheus_container_name}")
-    time.sleep(1)
-    os.system(f"docker rm {prometheus_container_name}")
-    time.sleep(1)
     os.system(f"docker run --name {prometheus_container_name} -d -p {prometheus_port}:9090 -v ./prom:/etc/prometheus prom/prometheus")
     
     deploy_dispatchers()
@@ -178,4 +260,38 @@ if __name__ == "__main__":
         prometheus_endpoint,
         dispatcher_endpoints
     )
+    time.sleep(2)
     
+    im = cv2.imread(f"./zidane.jpg")
+    im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
+    encoded = base64.b64encode(cv2.imencode(".jpg",im)[1].tobytes()).decode("utf-8")
+
+    counter = Manager().Value("i", value=0)
+    class MyLoadTester(BarAzmoon):
+        def get_request_data(self):
+            global counter
+            counter.value += 1
+            return counter.value, json.dumps({"data": encoded, "id": counter.value})
+
+        def process_response(self, sent_data_id: str, response: json):
+            print(str(datetime.now()), sent_data_id, response)
+
+    exporter = subprocess.Popen(["python", "pipelines/exporter.py"])
+    time.sleep(FIRST_DECIDE_DELAY_MINUTES * 60)
+    event = Event()
+    query_task = Thread(target=query_metrics, args=(prometheus_endpoint, event))
+    query_task.start()
+    
+    svc = get_service("video-detector-dispatcher-svc", "mehran")
+    workload = [7 for i in range(100)] + [30] * 100 + [7] * 100  # each item of the list is the number of request for a second
+    tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")
+    count, success = tester.start()
+    print("Load tester finished", count, success)
+    event.set()
+    query_task.join()
+    os.system(f"microk8s kubectl delete ns {namespace}")
+    os.system(f"docker stop {prometheus_container_name}")
+    time.sleep(1)
+    os.system(f"docker rm {prometheus_container_name}")
+    time.sleep(1)
+    os.system(f"kill -9 {exporter.pid}")
