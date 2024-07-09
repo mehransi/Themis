@@ -116,8 +116,15 @@ class Adapter:
         before_horizontal_time = time.perf_counter()
         new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
         future_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, next_10s_rps)
-        
         should_apply_horizontal = True
+        current_vertical_config, current_more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
+        if sum(current_more_instances) > 0:
+            should_apply_horizontal = False
+        for i in range(len(current_vertical_config)):
+            if current_vertical_config[i][0] > self.current_state[i][0]:
+                should_apply_horizontal = False
+                break
+        
         for i in range(len(new_horizontal_config)):
             if new_horizontal_config[i][0] < future_horizontal_config[i][0]:
                 should_apply_horizontal = False

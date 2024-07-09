@@ -28,17 +28,17 @@ def get_data():
     return base64.b64encode(cv2.imencode(".jpeg",im)[1].tobytes()).decode("utf-8")
 
 
-def deploy_classifier(next_target_endpoint, inter, intra):
+def deploy_detector(next_target_endpoint, inter, intra, cpu):
     create_pod(
-        POD_NAME,
+        f"{POD_NAME}-inter{inter}-intra{intra}",
         [
             {
                 "name": f"{POD_NAME}-container",
                 "image": IMAGE_NAME,
                 "request_mem": "1G",
-                "request_cpu": "1",
+                "request_cpu": f"{cpu}",
                 "limit_mem": "1G",
-                "limit_cpu": "1",
+                "limit_cpu": f"{cpu}",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": next_target_endpoint, 
                     "PORT": f"{PORT}", 
@@ -52,7 +52,7 @@ def deploy_classifier(next_target_endpoint, inter, intra):
     )
     while True:
             time.sleep(0.2)
-            pod = get_pod(POD_NAME, namespace=namespace)
+            pod = get_pod(f"{POD_NAME}-inter{inter}-intra{intra}", namespace=namespace)
             if pod["pod_ip"] and pod["pod_ip"].lower() != "none":
                 break    
     
@@ -80,10 +80,10 @@ if __name__ == "__main__":
   
     exporter = subprocess.Popen(["python", filename, f"{EXPORTER_PORT}", SOURCE_NAME])
     
-    
-    for inter in [1, 8]:
-        for intra in [1, 8]:
-            pod_ip = deploy_classifier(f"{EXPORTER_IP}:{EXPORTER_PORT}", inter, intra)
+    cpu = 4
+    for inter in [1, cpu]:
+        for intra in [1, cpu]:
+            pod_ip = deploy_detector(f"{EXPORTER_IP}:{EXPORTER_PORT}", inter, intra, cpu)
             input_data = get_data()
             
             requests.post(
@@ -106,7 +106,7 @@ if __name__ == "__main__":
                 )
                 time.sleep(3)
             
-            delete_pod(POD_NAME, namespace)
+            delete_pod(f"{POD_NAME}-inter{inter}-intra{intra}", namespace)
     
     
     os.system(f"kill -9 {exporter.pid}")

@@ -102,7 +102,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "POD_LABELS": json.dumps({
                         i: pipeline_config["stages"][i]["pod_labels"] for i in range(len(pipeline_config["stages"]))
                     }),
-                    "POD_PORTS": json.dumps({i: pipeline_config["stage"][i]["port"] for i in range(len(pipeline_config["stages"]))}),
+                    "POD_PORTS": json.dumps({i: pipeline_config["stages"][i]["port"] for i in range(len(pipeline_config["stages"]))}),
                     "CONTAINER_CONFIGS": json.dumps({
                         i: pipeline_config['stages'][i]['container_configs'] for i in range(len(pipeline_config['stages']))
                     })
@@ -140,7 +140,12 @@ if __name__ == "__main__":
     prometheus_container_name = "pelastic_prometheus"
     # os.system(f"microk8s kubectl apply -f podmonitor.yaml")
     os.system(f"microk8s config > ./prom/kube.config")
+    os.system(f"docker stop {prometheus_container_name}")
+    time.sleep(1)
+    os.system(f"docker rm {prometheus_container_name}")
+    time.sleep(1)
     os.system(f"docker run --name {prometheus_container_name} -d -p {prometheus_port}:9090 -v ./prom:/etc/prometheus prom/prometheus")
+    
     deploy_dispatchers()
     num_stages = len(pipeline_config["stages"])
     
@@ -149,7 +154,7 @@ if __name__ == "__main__":
     
     dispatcher_endpoints = {}
     for i in range(num_stages):
-        dispatcher_endpoints[i] = f"{get_service(f"{pipeline_config['stages'][i+1]['stage_bane']}-dispatcher-svc", namespace=namespace)["cluster_ip"]}:{DISPATCHER_PORT}"
+        dispatcher_endpoints[i] = get_service(f"{pipeline_config['stages'][i]['stage_name']}-dispatcher-svc", namespace=namespace)['cluster_ip'] + f":{DISPATCHER_PORT}"
     
     next_target_endpoints = {}
     for i in range(num_stages - 1):
