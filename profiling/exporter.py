@@ -20,11 +20,15 @@ class Exporter:
         self.logs.append(data)
         return {"saved": True}
 
-    async def write_to_file(self, cpu, batch):
+    async def write_to_file(self, data: dict):
         p = f"{current_dir}/models/{self.source_name.lower()}"
         os.system(f"mkdir -p {p}/data")
-        with open(f"{p}/data/{self.source_name}_latencies_core{cpu}_batch{batch}.json", "w") as f:
-            json.dump(self.logs[2*batch:], f, indent=2)
+        s = ""
+        for k, v in data.items():
+            if k != "batch":
+                s = s + f"{k}{v}_"
+        with open(f"{p}/data/{self.source_name}_latencies_{s}batch{data['batch']}.json", "w") as f:
+            json.dump(self.logs[2*data["batch"]:], f, indent=2)
         self.logs = []
         return {"saved_to_file": True}
         
@@ -37,7 +41,7 @@ async def receive(request):
 
 async def write_to_file(request):
     data = await request.json()
-    return web.json_response(await exporter.write_to_file(data["cpu"], data["batch"]))
+    return web.json_response(await exporter.write_to_file(data))
 
 
 app = web.Application()
