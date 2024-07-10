@@ -168,19 +168,19 @@ def query_metrics(prom_endpoint, event: Event):
         }
         for pl in percentiles.keys():
             percentiles[pl] = loop.run_in_executor(None, lambda: prom.get_instant(
-                f'histogram_quantile(0.{pl}, sum(rate(pelastic_requests_latency_bucket[{GET_METRICS_INTERVAL}s])) by (le))'
+                f'histogram_quantile(0.{pl}, sum(rate(pelastic_requests_latency_bucket[{2}s])) by (le))'
             ))
 
         cost = loop.run_in_executor(
-            None, lambda: prom.get_instant(f"sum(last_over_time(pelastic_cost[{GET_METRICS_INTERVAL}s]))")
+            None, lambda: prom.get_instant(f"sum(last_over_time(pelastic_cost[{2}s]))")
         )
 
         rate = loop.run_in_executor(
-            None, lambda: prom.get_instant(f"sum(rate(dispatcher_requests_total[{GET_METRICS_INTERVAL}s]))")
+            None, lambda: prom.get_instant(f"sum(rate(dispatcher_requests_total[{2}s]))")
         )
         
         drop_rate = loop.run_in_executor(
-            None, lambda: prom.get_instant(f"sum(rate(dispatcher_dropped_total[{GET_METRICS_INTERVAL}s]))")
+            None, lambda: prom.get_instant(f"sum(rate(dispatcher_dropped_total[{2}s]))")
         )
         
         cost = _get_value(await cost)
@@ -226,7 +226,9 @@ if __name__ == "__main__":
     prometheus_container_name = "pelastic_prometheus"
     # os.system(f"microk8s kubectl apply -f podmonitor.yaml")
     os.system(f"microk8s config > ./prom/kube.config")
-    os.system(f"docker run --name {prometheus_container_name} -d -p {prometheus_port}:9090 -v ./prom:/etc/prometheus prom/prometheus")
+    os.system(
+        f"docker run --name {prometheus_container_name} -d --net=host -v ./prom:/etc prom/prometheus --config.file=/etc/prometheus.yml --web.listen-address=0.0.0.0:{prometheus_port}"
+    )
     
     deploy_dispatchers()
     num_stages = len(pipeline_config["stages"])
