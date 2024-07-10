@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Input, LSTM, Dense
 from tensorflow.keras import regularizers
 from tensorflow.keras import saving
 
-history_seconds = 300
+history_seconds = 60
 next_prediction_period = 10
 input_shape = history_seconds // next_prediction_period
 
@@ -69,11 +69,11 @@ def my_train():
     plt.plot(list(range(len(test_y))), list(predictions), label="predictions")
     plt.legend()
     plt.show()
-    model.save('lstm.keras')
+    model.save('lstm60.keras')
 
 
 def my_test():
-    model = saving.load_model('lstm.keras')
+    model = saving.load_model('lstm60.keras')
     with open("workload.txt", "r") as f:
         workload = f.readlines()
     workload = workload[0].split()

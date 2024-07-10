@@ -86,19 +86,22 @@ class Dispatcher:
 
     async def main_loop(self):
         while True:
-            await asyncio.sleep(0.002)
+            await asyncio.sleep(0.001)
             batch = []
             while len(batch) < self.batch_size:
                 qd = await self.queue.get()
-                if 1000 * (time.time() - qd[f"arrival-{self.dispatcher_name}"]) >= self.latency_slo:
+                if 1000 * (time.time() - qd[f"arrival-stage-0"]) >= self.latency_slo:
                     self.total_dropped += 1
                     continue
-                qd[f"leaving-{self.dispatcher_name}"] = time.time()
+                
                 batch.append(qd)
             
+            tt = time.perf_counter()
             backend_name = await self.select_backend_to_dispatch()
+            self.logger.info(f'datetime={str(datetime.now())}, backend_selection_took={time.perf_counter() - tt}, id={batch[0]["id"]}, total_dropped={self.total_dropped}, {1000 * (time.time() - qd[f"arrival-{self.dispatcher_name}"])}')
             for q in batch:
                 q[f"backend-{self.dispatcher_name}"] = backend_name
+                q[f"leaving-{self.dispatcher_name}"] = time.time()
             session: ClientSession = self.sessions[backend_name]
             self.is_free[backend_name] = False
             asyncio.create_task(self.dispatch(session, backend_name, batch))
@@ -142,11 +145,11 @@ async def export_request_count(request):
     content = "# HELP dispatcher_requests_total Total number of requests\n"
     content += "# TYPE dispatcher_requests_total counter\n"
     if dispatcher.dispatcher_name:
-        content += f'dispatcher_requests_total {dispatcher.total_requests}\n'
+        content += f'dispatcher_requests_total{{stage="{dispatcher.dispatcher_name}"}} {dispatcher.total_requests}\n'
     content += "# HELP dispatcher_dropped_total Total number of dropped requests\n"
     content += "# TYPE dispatcher_dropped_total counter\n"
     if dispatcher.dispatcher_name:
-        content += f'dispatcher_dropped_total {dispatcher.total_dropped}\n'
+        content += f'dispatcher_dropped_total{{stage="{dispatcher.dispatcher_name}"}} {dispatcher.total_dropped}\n'
     return web.Response(body=content)
 
 

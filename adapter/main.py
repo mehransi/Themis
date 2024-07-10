@@ -82,7 +82,7 @@ class Adapter:
         async with self.prometheus_session.post(
             f"/api/v1/query",
             params={
-                "query": f"sum(rate(dispatcher_requests_total[2s]))",
+                "query": 'rate(dispatcher_requests_total{stage="stage-0"}[2s])',
             }
         ) as response:
             response = await response.json()
@@ -93,8 +93,8 @@ class Adapter:
         async with self.prometheus_session.post(
             f"/api/v1/query_range",
             params={
-                "query": "sum(dispatcher_requests_total)",
-                "start": now - 300,
+                "query": 'dispatcher_requests_total{stage="stage-0"}',
+                "start": now - 60,
                 "end": now,
                 "step": 1
             }
@@ -108,8 +108,8 @@ class Adapter:
         for i in range(0, len(history_rps), 10):
             inp.append(max(history_rps[i:i+10]))
         history_rps = inp
-        if len(history_rps) < 30:
-            history_rps = history_rps + (30 - len(history_rps)) * [history_rps[-1]]
+        if len(history_rps) < 6:
+            history_rps = history_rps + (6 - len(history_rps)) * [history_rps[-1]]
 
         next_10s_rps = self.predict(history_rps)
         
@@ -309,7 +309,7 @@ class Adapter:
     def predict(self, history_10m_rps):
         t = time.perf_counter()
         
-        history_5m = tf.convert_to_tensor(np.array(history_10m_rps).reshape((-1, 30, 1)), dtype=tf.float32)
+        history_5m = tf.convert_to_tensor(np.array(history_10m_rps).reshape((-1, 6, 1)), dtype=tf.float32)
         next_10s = self.lstm_model.predict(history_5m, verbose=0)
         return int(next_10s)
 

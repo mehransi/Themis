@@ -56,9 +56,9 @@ def deploy_dispatchers():
             "stage": f"{pipeline_config['stages'][i]['stage_name']}-dispatcher"
         }
         env_vars = {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "LATENCY_SLO": pipeline_config["SLO"]}
-        if i == 0:
-            dispatcher_labels["project"] = "pelastic"
-            env_vars["EXPORT_REQUESTS_TOTAL"] = 1
+        # if i == 0:
+        dispatcher_labels["project"] = "pelastic"
+        env_vars["EXPORT_REQUESTS_TOTAL"] = 1
         
         create_deployment(
             f"{pipeline_config['stages'][i]['stage_name']}-dispatcher",
@@ -170,31 +170,64 @@ def query_metrics(prom_endpoint, event: Event):
             percentiles[pl] = loop.run_in_executor(None, lambda: prom.get_instant(
                 f'histogram_quantile(0.{pl}, sum(rate(pelastic_requests_latency_bucket[{2}s])) by (le))'
             ))
+        
+        
+        dispatcher_stage0 = loop.run_in_executor(None, lambda: prom.get_instant(
+                f'histogram_quantile(0.99, sum(rate(dispatcher_stage0_latency_bucket[{2}s])) by (le))'
+        ))
+        
+        detector_latency = loop.run_in_executor(None, lambda: prom.get_instant(
+                f'histogram_quantile(0.99, sum(rate(detector_latency_bucket[{2}s])) by (le))'
+        ))
+        
+        dispatcher_stage1 = loop.run_in_executor(None, lambda: prom.get_instant(
+                f'histogram_quantile(0.99, sum(rate(dispatcher_stage1_latency_bucket[{2}s])) by (le))'
+        ))
+        classifier_latency = loop.run_in_executor(None, lambda: prom.get_instant(
+                f'histogram_quantile(0.99, sum(rate(classifier_latency_bucket[{2}s])) by (le))'
+        ))
 
+
+        cost_stage0 = loop.run_in_executor(
+            None, lambda: prom.get_instant('sum(last_over_time(pelastic_cost{stage="0"}[2s]))')
+        )
+        cost_stage1 = loop.run_in_executor(
+            None, lambda: prom.get_instant('sum(last_over_time(pelastic_cost{stage="1"}[2s]))')
+        )
         cost = loop.run_in_executor(
             None, lambda: prom.get_instant(f"sum(last_over_time(pelastic_cost[{2}s]))")
         )
 
         rate = loop.run_in_executor(
-            None, lambda: prom.get_instant(f"sum(rate(dispatcher_requests_total[{2}s]))")
+            None, lambda: prom.get_instant(f'sum(rate(dispatcher_requests_total{{stage="stage-0"}}[{2}s]))')
         )
         
         drop_rate = loop.run_in_executor(
             None, lambda: prom.get_instant(f"sum(rate(dispatcher_dropped_total[{2}s]))")
         )
-        
-        cost = _get_value(await cost)
-        rate = _get_value(await rate, should_round=False)
-        drop_rate = _get_value(await drop_rate, should_round=False)
-        
+        drop_total_stage0 = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'dispatcher_dropped_total{{stage="stage-0"}}')
+        )
+        drop_total_stage1 = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'dispatcher_dropped_total{{stage="stage-1"}}')
+        )
+                
         for pl in percentiles.keys():
             percentiles[pl] = _get_value(await percentiles[pl])
         
         return {
             **percentiles,
-            "cost": cost,
-            "rate": rate,
-            "drop_rate": drop_rate,
+            "dispatcher_stage0": _get_value(await dispatcher_stage0),
+            "detector_latency": _get_value(await detector_latency),
+            "dispatcher_stage1": _get_value(await dispatcher_stage1),
+            "classifier_latency": _get_value(await classifier_latency),
+            "cost": _get_value(await cost),
+            "cost_stage0": _get_value(await cost_stage0),
+            "cost_stage1": _get_value(await cost_stage1),
+            "rate": _get_value(await rate),
+            "drop_rate": _get_value(await drop_rate),
+            "drop_total_stage0": _get_value(await drop_total_stage0),
+            "drop_total_stage1": _get_value(await drop_total_stage1),
             "timestamp": datetime.now().isoformat()
         }
         
@@ -276,7 +309,8 @@ if __name__ == "__main__":
             return counter.value, json.dumps({"data": encoded, "id": counter.value})
 
         def process_response(self, sent_data_id: str, response: json):
-            print(str(datetime.now()), sent_data_id, response)
+            pass
+            # print(str(datetime.now()), sent_data_id, response)
 
     exporter = subprocess.Popen(["python", "pipelines/exporter.py"])
     time.sleep(FIRST_DECIDE_DELAY_MINUTES * 60)
@@ -285,7 +319,7 @@ if __name__ == "__main__":
     query_task.start()
     
     svc = get_service("video-detector-dispatcher-svc", "mehran")
-    workload = [7 for i in range(100)] + [30] * 100 + [7] * 100  # each item of the list is the number of request for a second
+    workload = [20] * 30 + [50] * 30 + [7] * 30  # each item of the list is the number of request for a second
     tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")
     count, success = tester.start()
     print("Load tester finished", count, success)
