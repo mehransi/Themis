@@ -32,7 +32,11 @@ namespace = "mehran"
 GET_METRICS_INTERVAL = 1
 FIRST_DECIDE_DELAY_MINUTES = 1
 
+SLO_MULTIPLIER = 0.9
+
 pipeline = sys.argv[1]
+adapter_type = sys.argv[2]
+assert adapter_type in ["hv", "ho", "vo"], "Adapter type must be one of {hv, ho, vo}"
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
@@ -55,7 +59,7 @@ def deploy_dispatchers():
             "component": "dispatcher",
             "stage": f"{pipeline_config['stages'][i]['stage_name']}-dispatcher"
         }
-        env_vars = {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "LATENCY_SLO": pipeline_config["SLO"]}
+        env_vars = {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "LATENCY_SLO": int(pipeline_config["SLO"] * SLO_MULTIPLIER)}
         # if i == 0:
         dispatcher_labels["project"] = "pelastic"
         env_vars["EXPORT_REQUESTS_TOTAL"] = 1
@@ -103,6 +107,7 @@ def deploy_adapter(next_target_endpoints: dict):
                 "limit_cpu": "1",
                 "env_vars": {
                     "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
+                    "ADAPTER_TYPE": adapter_type,
                     "DECISION_INTERVAL": "1",
                     "HORIZONTAL_STABILIZATION": "10",
                     "K8S_IN_CLUSTER_CLIENT": "true",
@@ -110,7 +115,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": 8,
                     "MAX_CPU_CORES": 8,
-                    "LATENCY_SLO": pipeline_config["SLO"],
+                    "LATENCY_SLO": int(pipeline_config["SLO"] * SLO_MULTIPLIER),
                     "BASE_POD_NAMES": json.dumps({i: pipeline_config["stages"][i]["stage_name"] for i in range(len(pipeline_config["stages"]))}),
                     "LATENCY_MODELS": json.dumps({
                         i: pipeline_config["stages"][i]["latency_model"] for i in range(len(pipeline_config["stages"]))
@@ -238,7 +243,7 @@ def query_metrics(prom_endpoint, event: Event):
             break
         time.sleep(GET_METRICS_INTERVAL)
         metrics = asyncio.run(get_metrics(prom))
-        filepath = f"./series.csv"
+        filepath = f"./series-{adapter_type}.csv"
         file_exists = os.path.exists(filepath)
         with open(filepath, "a") as f:
             field_names = [
@@ -318,8 +323,12 @@ if __name__ == "__main__":
     query_task = Thread(target=query_metrics, args=(prometheus_endpoint, event))
     query_task.start()
     
-    svc = get_service("video-detector-dispatcher-svc", "mehran")
-    workload = [20] * 30 + [50] * 30 + [7] * 30  # each item of the list is the number of request for a second
+    svc = get_service(f"{pipeline_config['stages'][0]['stage_name']}-dispatcher-svc", "mehran")
+    with open("workload.txt") as f:
+        wl = f.read()
+    wl = list(map(lambda x: round(int(x) / 5.48), wl.split()))
+    day = 60 * 60 * 24
+    workload = wl[15 * day + 84 * 60 : 15 * day + 105 * 60]
     tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")
     count, success = tester.start()
     print("Load tester finished", count, success)

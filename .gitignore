@@ -149,3 +149,5 @@ pyrightconfig.json
 
 .python-version
 tests/
+workload.txt
+series*.csv

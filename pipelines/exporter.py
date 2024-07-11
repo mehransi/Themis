@@ -2,7 +2,7 @@
 from aiohttp import web
 from prometheus_client import start_http_server, Histogram
 
-DEFAULT_BUCKETS = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0, 1.3, 1.6, 2, 2.5, 3, 4, 5, 7, 10, float("inf")]
+DEFAULT_BUCKETS = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.2, 2.5, 3, 4, 5, 7, 10, float("inf")]
 dispatcher_stage0_histogram = Histogram(
     'dispatcher_stage0_latency',
     'Dispatcher stage0 latency',
@@ -45,6 +45,9 @@ class Exporter:
         dispatcher_stage1_histogram.observe(data["dispatcher-stage1"])
         classifier_histogram.observe(data["classifier-e2e"])
         e2e_histogram.observe(data["e2e"])
+        
+        if data["dispatcher-stage0"] > 1.3 or data["dispatcher-stage1"] > 1.3:
+            print("************************************", data["dispatcher-stage0"], data["dispatcher-stage1"])
         
         print(
             f'c={self.c}, dispatcher-stage0={data["dispatcher-stage0"]}, detector={data["detector-e2e"]}, dispatcher-stage1={data["dispatcher-stage1"]}, classifier={data["classifier-e2e"]}, e2e={data["e2e"]}'

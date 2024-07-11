@@ -79,39 +79,8 @@ class Adapter:
 
     async def adapt(self):
         starting_time = time.perf_counter()
-        async with self.prometheus_session.post(
-            f"/api/v1/query",
-            params={
-                "query": 'rate(dispatcher_requests_total{stage="stage-0"}[2s])',
-            }
-        ) as response:
-            response = await response.json()
-            current_rps = int(float(response["data"]["result"][0]["value"][1]))
-                
-            
-        now = datetime.now().timestamp()
-        async with self.prometheus_session.post(
-            f"/api/v1/query_range",
-            params={
-                "query": 'dispatcher_requests_total{stage="stage-0"}',
-                "start": now - 60,
-                "end": now,
-                "step": 1
-            }
-        ) as response:
-            response = await response.json()
-            history_rps = response["data"]["result"][0].get("values")
-       
-        history_rps = list(map(lambda x: int(x[1]), history_rps))
-        history_rps = [history_rps[i] - history_rps[i-1] for i in range(1, len(history_rps))]
-        inp = []
-        for i in range(0, len(history_rps), 10):
-            inp.append(max(history_rps[i:i+10]))
-        history_rps = inp
-        if len(history_rps) < 6:
-            history_rps = history_rps + (6 - len(history_rps)) * [history_rps[-1]]
-
-        next_10s_rps = self.predict(history_rps)
+        current_rps = await self.get_current_rps()
+        next_10s_rps = await self.get_next_10_rps()
         
         before_horizontal_time = time.perf_counter()
         new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
@@ -200,7 +169,7 @@ class Adapter:
                                 self.__thread_executor,
                                 lambda: delete_pod(r["name"], namespace=self.k8s_namespace)
                             )
-                            self.logger.info(f"datetime={str(datetime.now())}, replica={r['name']}, delete_response={delete_response}")
+                            self.logger.info(f"datetime={str(datetime.now())}, deleted_replica={r['name']}")
                         
             await asyncio.gather(*tasks)
             await asyncio.gather(*[asyncio.create_task(f) for f in futures])
@@ -223,6 +192,132 @@ class Adapter:
         self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
         self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
                 
+    
+    async def adapt_ho(self):
+        starting_time = time.perf_counter()
+        current_rps = await self.get_current_rps()
+        horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
+        is_scaling_in = True
+        for i in range(len(self.current_state)):
+            if self.current_state[i][1] < horizontal_config[i][0]:
+                is_scaling_in = False
+                break
+        if is_scaling_in:
+            if self.horizontal_stabilization_counter < self.horizontal_stabilization:
+                    self.horizontal_stabilization_counter += 1
+                    return
+        new_state = {}
+        self.horizontal_stabilization_counter = 0
+        tasks = []
+        loop = asyncio.get_event_loop()
+        for i in range(len(horizontal_config)):
+            new_state[i] = [1, horizontal_config[i][0], horizontal_config[i][1]]
+            self.logger.info(f"datetime={str(datetime.now())}, Prev state {i}={json.dumps(self.current_state[i])} | New state {i}={json.dumps(new_state[i])}")
+            if new_state[i] == self.current_state[i]:
+                continue
+            
+            if horizontal_config[i][0] > self.current_state[i][1]:
+                for _ in range(horizontal_config[i][0] - self.current_state[i][1]):
+                    tasks.append(
+                        asyncio.create_task(self.create_pod(i, 1))
+                    )
+            else:
+                extra_pods_count = self.current_state[i][1] - horizontal_config[i][0]
+                extra_pods = self.stage_replicas[i][:extra_pods_count]
+                self.stage_replicas[i] = self.stage_replicas[i][extra_pods_count:]
+                self.logger.info(f"datetime={str(datetime.now())}, pods_to_delete_stage{i}={json.dumps(extra_pods)}")
+                self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
+                if extra_pods:
+                    await self.reset_backends(i, self.stage_replicas[i])
+                    for r in extra_pods:
+                        delete_response = await loop.run_in_executor(
+                            self.__thread_executor,
+                            lambda: delete_pod(r["name"], namespace=self.k8s_namespace)
+                        )
+                        self.logger.info(f"datetime={str(datetime.now())}, deleted_replica={r['name']}")
+        await asyncio.gather(*tasks)
+        
+        update_dispatchers_tasks = []
+        before_updating_dispatchers_time = time.perf_counter()
+        for i in range(len(self.current_state)):
+            _, prev_replicas, prev_batch_size = self.current_state[i]
+            _, new_replicas, new_batch_size = new_state[i]
+            if prev_replicas < new_replicas:  # for deleted replicas, we already resetted the backends
+                update_dispatchers_tasks.append(self.reset_backends(i, self.stage_replicas[i]))
+            if new_batch_size != prev_batch_size:
+                update_dispatchers_tasks.append(self.update_batch(i, new_batch_size))
+        
+        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
+        self.current_state = new_state
+        await asyncio.gather(*update_dispatchers_tasks)
+        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
+    
+    
+    async def adapt_vo(self):
+        starting_time = time.perf_counter()
+        current_rps = await self.get_current_rps()
+        new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
+        new_state = {}
+        update_tasks = []
+        for i in range(len(new_vertical_config)):
+            new_state[i] = [new_vertical_config[i][0], 1, new_vertical_config[i][1]]
+            if new_vertical_config[i][0] != self.current_state[i][0]:
+                update_tasks.append(
+                    asyncio.create_task(self.update_pod(self.stage_replicas[i][0], i, new_vertical_config[i][0]))
+                )
+        await asyncio.gather(*update_tasks)
+        
+        update_dispatchers_tasks = []
+        before_updating_dispatchers_time = time.perf_counter()
+        for i in range(len(self.current_state)):
+            _, _, prev_batch_size = self.current_state[i]
+            _, _, new_batch_size = new_state[i]
+            if new_batch_size != prev_batch_size:
+                update_dispatchers_tasks.append(self.update_batch(i, new_batch_size))
+        
+        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
+        self.current_state = new_state
+        await asyncio.gather(*update_dispatchers_tasks)
+        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
+            
+        
+        
+    async def get_current_rps(self):
+        async with self.prometheus_session.post(
+            f"/api/v1/query",
+            params={
+                "query": 'rate(dispatcher_requests_total{stage="stage-0"}[2s])',
+            }
+        ) as response:
+            response = await response.json()
+            return int(float(response["data"]["result"][0]["value"][1]))
+    
+    async def get_next_10_rps(self):
+        now = datetime.now().timestamp()
+        async with self.prometheus_session.post(
+            f"/api/v1/query_range",
+            params={
+                "query": 'dispatcher_requests_total{stage="stage-0"}',
+                "start": now - 60,
+                "end": now,
+                "step": 1
+            }
+        ) as response:
+            response = await response.json()
+            history_rps = response["data"]["result"][0].get("values")
+       
+        history_rps = list(map(lambda x: int(x[1]), history_rps))
+        history_rps = [history_rps[i] - history_rps[i-1] for i in range(1, len(history_rps))]
+        inp = []
+        for i in range(0, len(history_rps), 10):
+            inp.append(max(history_rps[i:i+10]))
+        history_rps = inp
+        if len(history_rps) < 6:
+            history_rps = history_rps + (6 - len(history_rps)) * [history_rps[-1]]
+
+        return self.predict(history_rps)
+        
+        
     async def create_pod(self, stage_idx, cpu: int):
         new_pod_name = f"{self.base_pod_names[stage_idx]}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=5))}"
         loop = asyncio.get_event_loop()
@@ -338,13 +433,21 @@ async def export_cost(request):
 async def decide(request):
     return web.json_response(await adapter.adapt())
 
+async def decide_ho(request):
+    return web.json_response(await adapter.adapt_ho())
+
+async def decide_vo(request):
+    return web.json_response(await adapter.adapt_vo())
+
 
 app = web.Application()
 app.add_routes(
     [
         web.post("/initialize", initialize),
         web.get("/metrics", export_cost),
-        web.post("/decide", decide)
+        web.post("/decide", decide),
+        web.post("/decide-ho", decide_ho),
+        web.post("/decide-vo", decide_vo)
     ]
 )
 if __name__ == '__main__':
