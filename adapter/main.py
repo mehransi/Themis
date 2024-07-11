@@ -118,8 +118,8 @@ class Adapter:
             new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             new_state = {}
             for i in range(len(new_vertical_config)):
-                new_state[i] = [max(new_vertical_config[i][0], self.current_state[i][0]), self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
-                if new_vertical_config[i][0] > self.current_state[i][0]:
+                new_state[i] = [new_vertical_config[i][0], self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
+                if new_vertical_config[i][0] != self.current_state[i][0]:
                     for r in self.stage_replicas[i]:
                         update_tasks.append(
                             asyncio.create_task(self.update_pod(r, i, new_vertical_config[i][0]))
