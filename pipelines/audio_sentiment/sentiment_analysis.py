@@ -1,5 +1,4 @@
 import os
-import torch
 
 from aiohttp import web
 from transformers import pipeline
@@ -10,7 +9,7 @@ from model_server import ModelServer, add_base_routes
 class SentimentAnalysis(ModelServer):
     def load_model(self):
         model = pipeline(
-            task="sentiment-analysis", model="Souvikcmsa/SentimentAnalysisDistillBERT"
+            task="sentiment-analysis", model="./Souvikcmsa/SentimentAnalysisDistillBERT"
         )
         return model
     

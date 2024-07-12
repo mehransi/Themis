@@ -10,5 +10,6 @@ RUN pip install datasets==2.19.1
 
 COPY model_server.py model_server.py
 COPY sentiment_analysis.py sentiment_analysis.py
+COPY Souvikcmsa Souvikcmsa
 
 ENTRYPOINT ["python", "sentiment_analysis.py"]

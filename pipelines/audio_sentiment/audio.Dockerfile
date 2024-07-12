@@ -13,5 +13,6 @@ RUN pip install librosa==0.10.2.post1
 
 COPY model_server.py model_server.py
 COPY audio_to_text.py audio_to_text.py
+COPY facebook facebook
 
 ENTRYPOINT ["python", "audio_to_text.py"]

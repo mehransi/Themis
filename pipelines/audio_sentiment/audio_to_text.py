@@ -2,7 +2,6 @@ import base64
 import io
 import os
 import soundfile as sf
-import torch
 
 from aiohttp import web
 from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
@@ -13,8 +12,8 @@ from model_server import ModelServer, add_base_routes
 class AudioToText(ModelServer):
 
     def load_model(self):
-        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        self.processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+        model = Speech2TextForConditionalGeneration.from_pretrained("./facebook/s2t-small-librispeech-asr-model")
+        self.processor = Speech2TextProcessor.from_pretrained("./facebook/s2t-small-librispeech-asr-processor")
         self.__sample = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")[0]["audio"]["array"]
         return model
     
