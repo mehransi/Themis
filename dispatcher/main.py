@@ -12,7 +12,7 @@ class Dispatcher:
         self.is_free = {}
         self.backend_port = None
         self.url_path = os.getenv("URL_PATH", "/infer")
-        self.latency_slo = int(os.environ["LATENCY_SLO"]) # ms
+        self.drop_after = int(os.environ["DROP_AFTER"]) # ms, zero means no drop
         self.idx = 0
         self.total_requests = 0
         self.total_dropped = 0
@@ -90,9 +90,10 @@ class Dispatcher:
             batch = []
             while len(batch) < self.batch_size:
                 qd = await self.queue.get()
-                if 1000 * (time.time() - qd[f"arrival-stage-0"]) >= self.latency_slo:
-                    self.total_dropped += 1
-                    continue
+                if self.drop_after:
+                    if 1000 * (time.time() - qd[f"arrival-stage-0"]) >= self.drop_after:
+                        self.total_dropped += 1
+                        continue
                 
                 batch.append(qd)
             

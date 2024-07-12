@@ -32,7 +32,8 @@ namespace = "mehran"
 GET_METRICS_INTERVAL = 1
 FIRST_DECIDE_DELAY_MINUTES = 1
 
-SLO_MULTIPLIER = 0.9
+SLO_MULTIPLIER = 1
+DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
 adapter_type = sys.argv[2]
@@ -40,7 +41,10 @@ assert adapter_type in ["hv", "ho", "vo"], "Adapter type must be one of {hv, ho,
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
-    
+
+SLO = pipeline_config["SLO"]
+
+drop_after = SLO * DROP_MULTIPLIER
 
 ADAPTER_DEPLOY_NAME = "pelastic-adapter"
 
@@ -59,7 +63,7 @@ def deploy_dispatchers():
             "component": "dispatcher",
             "stage": f"{pipeline_config['stages'][i]['stage_name']}-dispatcher"
         }
-        env_vars = {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "LATENCY_SLO": int(pipeline_config["SLO"] * SLO_MULTIPLIER)}
+        env_vars = {"DISPATCHER_PORT": f"{DISPATCHER_PORT}", "PYTHONUNBUFFERED": "1", "DROP_AFTER": drop_after}
         # if i == 0:
         dispatcher_labels["project"] = "pelastic"
         env_vars["EXPORT_REQUESTS_TOTAL"] = 1
@@ -115,7 +119,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": 8,
                     "MAX_CPU_CORES": 8,
-                    "LATENCY_SLO": int(pipeline_config["SLO"] * SLO_MULTIPLIER),
+                    "LATENCY_SLO": int(SLO * SLO_MULTIPLIER),
                     "BASE_POD_NAMES": json.dumps({i: pipeline_config["stages"][i]["stage_name"] for i in range(len(pipeline_config["stages"]))}),
                     "LATENCY_MODELS": json.dumps({
                         i: pipeline_config["stages"][i]["latency_model"] for i in range(len(pipeline_config["stages"]))
@@ -169,29 +173,32 @@ def query_metrics(prom_endpoint, event: Event):
     async def get_metrics(prom: PrometheusClient):
         loop = asyncio.get_event_loop()
         percentiles = {
-            99: None, 95: None, 90: None, 50: None,
+            99: None, 98: None, 97: None, 96: None, 95: None, 90: None, 50: None,
         }
+        
         for pl in percentiles.keys():
             percentiles[pl] = loop.run_in_executor(None, lambda: prom.get_instant(
-                f'histogram_quantile(0.{pl}, sum(rate(pelastic_requests_latency_bucket[{2}s])) by (le))'
-            ))
+                f'histogram_quantile(0.{pl}, sum(rate(pelastic_requests_latency_bucket[{2}s])) by (le))')
+            )
         
         
-        dispatcher_stage0 = loop.run_in_executor(None, lambda: prom.get_instant(
-                f'histogram_quantile(0.99, sum(rate(dispatcher_stage0_latency_bucket[{2}s])) by (le))'
-        ))
+        dispatcher_stage0 = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage0_latency_bucket[{2}s])) by (le))')
+        )
         
-        detector_latency = loop.run_in_executor(None, lambda: prom.get_instant(
-                f'histogram_quantile(0.99, sum(rate(detector_latency_bucket[{2}s])) by (le))'
-        ))
         
-        dispatcher_stage1 = loop.run_in_executor(None, lambda: prom.get_instant(
-                f'histogram_quantile(0.99, sum(rate(dispatcher_stage1_latency_bucket[{2}s])) by (le))'
-        ))
-        classifier_latency = loop.run_in_executor(None, lambda: prom.get_instant(
-                f'histogram_quantile(0.99, sum(rate(classifier_latency_bucket[{2}s])) by (le))'
-        ))
-
+        detector_latency = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(detector_latency_bucket[{2}s])) by (le))')
+        )
+        
+        
+        dispatcher_stage1 = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage1_latency_bucket[{2}s])) by (le))')
+        )
+        
+        classifier_latency = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(classifier_latency_bucket[{2}s])) by (le))')
+        )
 
         cost_stage0 = loop.run_in_executor(
             None, lambda: prom.get_instant('sum(last_over_time(pelastic_cost{stage="0"}[2s]))')
@@ -205,6 +212,14 @@ def query_metrics(prom_endpoint, event: Event):
 
         rate = loop.run_in_executor(
             None, lambda: prom.get_instant(f'sum(rate(dispatcher_requests_total{{stage="stage-0"}}[{2}s]))')
+        )
+        
+        total_requests = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'dispatcher_requests_total{{stage="stage-0"}}')
+        )
+        
+        within_slo = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'sum(rate(pelastic_requests_latency_bucket{{le="{SLO / 1000}"}}[2s])) / sum(rate(pelastic_requests_latency_count[2s]))')
         )
         
         drop_rate = loop.run_in_executor(
@@ -230,6 +245,8 @@ def query_metrics(prom_endpoint, event: Event):
             "cost_stage0": _get_value(await cost_stage0),
             "cost_stage1": _get_value(await cost_stage1),
             "rate": _get_value(await rate),
+            "total_requests": _get_value(await total_requests),
+            "within_slo": _get_value(await within_slo, should_round=False),
             "drop_rate": _get_value(await drop_rate),
             "drop_total_stage0": _get_value(await drop_total_stage0),
             "drop_total_stage1": _get_value(await drop_total_stage1),
@@ -243,7 +260,7 @@ def query_metrics(prom_endpoint, event: Event):
             break
         time.sleep(GET_METRICS_INTERVAL)
         metrics = asyncio.run(get_metrics(prom))
-        filepath = f"./series-{adapter_type}.csv"
+        filepath = f"./series-{pipeline}-{adapter_type}-{SLO}-{drop_after}.csv"
         file_exists = os.path.exists(filepath)
         with open(filepath, "a") as f:
             field_names = [
@@ -317,7 +334,7 @@ if __name__ == "__main__":
             pass
             # print(str(datetime.now()), sent_data_id, response)
 
-    exporter = subprocess.Popen(["python", "pipelines/exporter.py"])
+    exporter = subprocess.Popen(["python", "pipelines/exporter.py", str(SLO / 1000)])
     time.sleep(FIRST_DECIDE_DELAY_MINUTES * 60)
     event = Event()
     query_task = Thread(target=query_metrics, args=(prometheus_endpoint, event))
@@ -326,9 +343,9 @@ if __name__ == "__main__":
     svc = get_service(f"{pipeline_config['stages'][0]['stage_name']}-dispatcher-svc", "mehran")
     with open("workload.txt") as f:
         wl = f.read()
-    wl = list(map(lambda x: round(int(x) / 5.48), wl.split()))
+    wl = list(map(lambda x: round(int(x) / (5.48 / 1.25)), wl.split()))
     day = 60 * 60 * 24
-    workload = wl[15 * day + 84 * 60 : 15 * day + 105 * 60]
+    workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
     tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")
     count, success = tester.start()
     print("Load tester finished", count, success)

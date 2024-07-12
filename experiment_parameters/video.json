@@ -1,5 +1,5 @@
 {
-    "SLO": 1300,
+    "SLO": 520,
     "stages": [
         {
             "stage_name": "video-detector",
