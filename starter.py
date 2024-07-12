@@ -176,6 +176,7 @@ def query_metrics(prom_endpoint, event: Event):
         percentiles = {
             99: None, 98: None, 97: None, 96: None, 95: None, 90: None, 50: None,
         }
+        models = {}
         
         for pl in percentiles.keys():
             percentiles[pl] = loop.run_in_executor(None, lambda: prom.get_instant(
@@ -187,18 +188,25 @@ def query_metrics(prom_endpoint, event: Event):
             None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage0_latency_bucket[{2}s])) by (le))')
         )
         
-        
-        detector_latency = loop.run_in_executor(
-            None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(detector_latency_bucket[{2}s])) by (le))')
-        )
-        
+        if pipeline == "video":
+            models["detector_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(detector_latency_bucket[{2}s])) by (le))')
+            )
+            models["classifier_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(classifier_latency_bucket[{2}s])) by (le))')
+            )
+        elif pipeline == "sentiment":
+            models["audio_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(audio_latency_bucket[{2}s])) by (le))')
+            )
+            models["sentiment_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(sentiment_latency_bucket[{2}s])) by (le))')
+            )
+        else:
+            pass # FIXME
         
         dispatcher_stage1 = loop.run_in_executor(
             None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage1_latency_bucket[{2}s])) by (le))')
-        )
-        
-        classifier_latency = loop.run_in_executor(
-            None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(classifier_latency_bucket[{2}s])) by (le))')
         )
 
         cost_stage0 = loop.run_in_executor(
@@ -235,13 +243,14 @@ def query_metrics(prom_endpoint, event: Event):
                 
         for pl in percentiles.keys():
             percentiles[pl] = _get_value(await percentiles[pl])
+        for m in models.keys():
+            models[m] = _get_value(await models[m])
         
         return {
             **percentiles,
             "dispatcher_stage0": _get_value(await dispatcher_stage0),
-            "detector_latency": _get_value(await detector_latency),
+            **models,
             "dispatcher_stage1": _get_value(await dispatcher_stage1),
-            "classifier_latency": _get_value(await classifier_latency),
             "cost": _get_value(await cost),
             "cost_stage0": _get_value(await cost_stage0),
             "cost_stage1": _get_value(await cost_stage1),
@@ -340,7 +349,7 @@ if __name__ == "__main__":
             pass
             # print(str(datetime.now()), sent_data_id, response)
 
-    exporter = subprocess.Popen(["python", "pipelines/exporter.py", str(SLO / 1000)])
+    exporter = subprocess.Popen(["python", f"pipelines/exporter-{pipeline}.py", str(SLO / 1000)])
     time.sleep(FIRST_DECIDE_DELAY_MINUTES * 60)
     event = Event()
     query_task = Thread(target=query_metrics, args=(prometheus_endpoint, event))
@@ -349,7 +358,13 @@ if __name__ == "__main__":
     svc = get_service(f"{pipeline_config['stages'][0]['stage_name']}-dispatcher-svc", "mehran")
     with open("workload.txt") as f:
         wl = f.read()
-    wl = list(map(lambda x: round(int(x) / (5.48 / 1.25)), wl.split()))
+    if pipeline == "video":
+        wl_divider = 4.384
+    elif pipeline == "sentiment":
+        wl_divider = 8.5625
+    else:
+        wl_divider = 8.5625 # FIXME
+    wl = list(map(lambda x: round(int(x) / wl_divider), wl.split()))
     day = 60 * 60 * 24
     workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
     tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")
