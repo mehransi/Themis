@@ -14,7 +14,7 @@ POD_NAME = "sentiment-analysis"
 PORT = 8000
 
 EXPORTER_IP = os.environ["NODE_IP"]
-EXPORTER_PORT = 8083
+EXPORTER_PORT = 8084
 SOURCE_NAME = "SentimentAnalysis"
 IMAGE_NAME = "mehransi/main:pelastic-sentiment-analysis"
 

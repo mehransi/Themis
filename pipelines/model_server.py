@@ -47,16 +47,18 @@ class ModelServer:
         return preds
     
     def get_next_target_data(self, pred):
-        raise pred
+        return pred
 
     async def infer(self, req) -> dict:
         batch = []
         arrival_time = time.time()
+        c = 0
         for query in req:
             data = query["data"]
             query[f"arrival-{self.__class__.__name__}"] = arrival_time
             inp = self.preprocess(data)
             batch.append(inp)
+            c += 1
 
         batch = self.batch_preprocess(batch)
         t = time.perf_counter()
@@ -65,10 +67,10 @@ class ModelServer:
         t = time.perf_counter() - t
         
         tasks = []
-        for i in range(len(batch)):
+        for i in range(c):
             to_send = req[i]
             to_send["data"] = self.get_next_target_data(preds[i])
-            to_send[f"{self.__class__.__name__}-batch-inference-time-{len(batch)}"] = t
+            to_send[f"{self.__class__.__name__}-batch-inference-time-{c}"] = t
             to_send[f"leaving-{self.__class__.__name__}"] = time.time()
 
             tasks.append(asyncio.create_task(self.send(to_send)))

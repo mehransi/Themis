@@ -151,3 +151,5 @@ pyrightconfig.json
 tests/
 workload.txt
 series*.csv
+zidane.jpg
+audio.flac

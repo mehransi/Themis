@@ -10,9 +10,12 @@ RUN pip install sentencepiece==0.2.0
 RUN pip install datasets==2.19.1
 RUN pip install soundfile==0.12.1
 RUN pip install librosa==0.10.2.post1
+RUN pip install numpy==1.26.3
 
+COPY facebook facebook
+COPY audio.flac audio.flac
 COPY model_server.py model_server.py
 COPY audio_to_text.py audio_to_text.py
-COPY facebook facebook
+
 
 ENTRYPOINT ["python", "audio_to_text.py"]

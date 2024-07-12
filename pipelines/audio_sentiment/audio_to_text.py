@@ -5,7 +5,6 @@ import soundfile as sf
 
 from aiohttp import web
 from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
-from datasets import load_dataset
 
 from model_server import ModelServer, add_base_routes
 
@@ -14,7 +13,7 @@ class AudioToText(ModelServer):
     def load_model(self):
         model = Speech2TextForConditionalGeneration.from_pretrained("./facebook/s2t-small-librispeech-asr-model")
         self.processor = Speech2TextProcessor.from_pretrained("./facebook/s2t-small-librispeech-asr-processor")
-        self.__sample = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")[0]["audio"]["array"]
+        self.__sample, _ = sf.read(io.BytesIO(open("audio.flac", "rb").read()), dtype="float32")
         return model
     
     def warmup(self):

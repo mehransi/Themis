@@ -36,6 +36,7 @@ SLO_MULTIPLIER = 1
 DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
+assert pipeline in ["video", "sentiment", "nlp"]
 adapter_type = sys.argv[2]
 assert adapter_type in ["hv", "ho", "vo"], "Adapter type must be one of {hv, ho, vo}"
 
@@ -319,9 +320,14 @@ if __name__ == "__main__":
     )
     time.sleep(2)
     
-    im = cv2.imread(f"./zidane.jpg")
-    im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
-    encoded = base64.b64encode(cv2.imencode(".jpg",im)[1].tobytes()).decode("utf-8")
+    if pipeline == "video":
+        im = cv2.imread(f"./zidane.jpg")
+        im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
+        encoded = base64.b64encode(cv2.imencode(".jpg",im)[1].tobytes()).decode("utf-8")
+    elif pipeline == "sentiment":
+        encoded = base64.b64encode(open('./audio.flac', 'rb').read()).decode("utf-8")
+    else:
+        encoded = "nor is mister cultar's manner less interesting than his matter"
 
     counter = Manager().Value("i", value=0)
     class MyLoadTester(BarAzmoon):
