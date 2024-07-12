@@ -1,14 +1,14 @@
 {
-    "SLO": 780,
+    "SLO": 1350,
     "stages": [
         {
-            "stage_name": "video-detector",
+            "stage_name": "audio-to-text",
             "port": 8000,
-            "pod_labels": {"pipeline": "video", "component": "model-server", "stage": "video-detector"},
-            "latency_model": [148.81709977526535, 37.49369666805188, 5.432908755854746, -15.475937098807677],
+            "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "audio-to-text"},
+            "latency_model": [44.923306814727816, 76.80471946750616, 224.49027102975265, 58.078183039499415],
             "container_configs": {
-                "name": "video-detector-container",
-                "image": "mehransi/main:pelastic-video-detector",
+                "name": "audio-to-text-container",
+                "image": "mehransi/main:pelastic-audio-to-text",
                 "request_mem": "1G",
                 "limit_mem": "1G",
                 "env_vars": {
@@ -22,13 +22,13 @@
             }
         },
         {
-            "stage_name": "video-classifier",
+            "stage_name": "sentiment-analysis",
             "port": 8000,
-            "pod_labels": {"pipeline": "video", "component": "model-server", "stage": "video-classifier"},
-            "latency_model": [34.69333807478468, 2.058115261491216, 19.478793326347812, 14.259440042600422],
+            "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "sentiment-analysis"},
+            "latency_model": [51.85141907037821, 5.198317516062025, 9.25739544327618, 1.3782576036371632],
             "container_configs": {
-                "name": "video-classifier-container",
-                "image": "mehransi/main:pelastic-video-classifier",
+                "name": "sentiment-analysis-container",
+                "image": "mehransi/main:pelastic-sentiment-analysis",
                 "request_mem": "1G",
                 "limit_mem": "1G",
                 "env_vars": {

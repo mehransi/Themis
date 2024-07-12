@@ -95,7 +95,7 @@ if __name__ == "__main__":
         response = requests.post(f"http://{pod_ip}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
         assert json.loads(response.text) == {"success": True}
         time.sleep(0.2)
-        for batch in range(1, 9):
+        for batch in range(1, 7):  # Maximum request body size 1048576 exceeded 
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})
