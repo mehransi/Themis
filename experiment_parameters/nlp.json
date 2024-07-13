@@ -1,0 +1,61 @@
+{
+    "SLO": 2550,
+    "stages": [
+        {
+            "stage_name": "language-identification",
+            "port": 8000,
+            "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "language-identification"},
+            "latency_model": [21.36871436832019, 1.5569641306191406, 53.785185960044615, 27.77545863159201],
+            "container_configs": {
+                "name": "language-identification-container",
+                "image": "mehransi/main:pelastic-language-identification",
+                "request_mem": "1G",
+                "limit_mem": "1G",
+                "env_vars": {
+                    "NEXT_TARGET_ENDPOINT": "",
+                    "PORT": "8000",
+                    "URL_PATH": "/predict",
+                    "PYTHONUNBUFFERED": "1"
+                },
+                "container_ports": [8000]
+            }
+        },
+        {
+            "stage_name": "translation",
+            "port": 8000,
+            "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "translation"},
+            "latency_model": [304.596066487657, 74.08666337647502, -13.468936326215587, 11.630634430011373],
+            "container_configs": {
+                "name": "translation-container",
+                "image": "mehransi/main:pelastic-translation",
+                "request_mem": "1G",
+                "limit_mem": "2G",
+                "env_vars": {
+                    "NEXT_TARGET_ENDPOINT": "", 
+                    "PORT": "8000",
+                    "URL_PATH": "/predict",
+                    "PYTHONUNBUFFERED": "1"
+                },
+                "container_ports": [8000]
+            }
+        },
+        {
+            "stage_name": "summarizer",
+            "port": 8000,
+            "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "summarizer"},
+            "latency_model": [263.93594914585606, 83.63772165096029, -1.006786216767125, 23.573866180316415],
+            "container_configs": {
+                "name": "summarizer-container",
+                "image": "mehransi/main:pelastic-summarizer",
+                "request_mem": "1G",
+                "limit_mem": "2G",
+                "env_vars": {
+                    "NEXT_TARGET_ENDPOINT": "", 
+                    "PORT": "8000",
+                    "PYTHONUNBUFFERED": "1"
+                },
+                "container_ports": [8000]
+            }
+        }
+    ]
+}
