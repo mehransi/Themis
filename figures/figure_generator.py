@@ -2,17 +2,16 @@ import random
 import shutil
 import json
 import matplotlib.pyplot as plt
-import numpy
 import pandas as pd
 from pdfCropMargins import crop
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 import csv
+import numpy as np
 
 # import math
 # import random
 # import matplotlib.patches as patches
 # from copy import deepcopy
-# import numpy as np
 # import os
 # import matplotlib.gridspec as gridspec
 # from matplotlib.ticker import NullFormatter, PercentFormatter
@@ -637,7 +636,7 @@ def preliminary_evaluation():
     crop_pdf(where_to_save_pdf)
 
 
-def draw_cpu_batch_figure():
+def bos_draw_cpu_batch_figure():
     x_data = [1, 2, 4, 8]
     batches = [1, 2, 4, 8]
     with open("profiling/models/detector/parameters.json") as f:
@@ -719,7 +718,7 @@ def draw_cpu_batch_figure():
     crop_pdf(where_to_save_pdf)
 
 
-def draw_inter_intra():
+def bos_draw_inter_intra():
     x_data = [1, 2, 4, 8]
     colors = ['#005906', 'plum', 'chocolate', '#f7cc3e', '#3894fc']
     with open("profiling/models/detector/profiling-parallelism.json") as f:
@@ -770,7 +769,7 @@ def draw_inter_intra():
     crop_pdf(where_to_save_pdf)
 
 
-def draw_lstm_result():
+def bos_draw_lstm_result():
     test_x = [123, 109, 96, 92, 85, 93, 98, 96, 87, 88, 86, 95, 85, 91, 93, 105, 96, 91, 83, 99, 89, 106, 87, 87, 95,
               92, 95, 88, 96, 93, 98, 80, 91, 98, 92, 80, 82, 89, 88, 93, 95, 93, 91, 89, 79, 83, 91, 81, 96, 95, 88,
               95, 89, 93, 90, 93, 96, 93, 88, 83, 81, 84, 99, 88, 90, 82, 83, 90, 99, 84, 97, 93, 83, 86, 93, 86, 94,
@@ -868,132 +867,226 @@ def draw_lstm_result():
     crop_pdf(where_to_save_pdf)
 
 
-def draw_experiment_results():
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1)
-    total_rps = 0
-    total_drop = 0
-    cost_max = 0
-    violation_max = 0
-    drop_max = 0
-    p99_max = 0
-    data = csv.DictReader(open('experiment_results/series.csv', newline=''))
+def get_data_from_csv(filename_csv, start_range=0, end_range=600):
+    data_hv = csv.DictReader(open(filename_csv, newline=''))
     p99_list = []
     cost_list = []
     drop_list = []
     violation_list = []
     rps_list = []
-    saeed_thickness = 2
-    for row in data:
-        if float(row['rate']) == 0:
+    p95_list = []
+    p90_list = []
+    p50_list = []
+    for row in data_hv:
+        if (row['rate'] == '' or float(row['rate']) == 0 or row['99'] == '' or row['cost'] == '' or row['50'] == '' or
+                row['drop_rate'] == '' or row['within_slo'] == '' or row['95'] == '' or row['90'] == ''):
             continue
-        total_rps += float(row['rate'])
         rps_list.append(float(row['rate']))
-        total_drop = float(row['drop_total_stage0']) + float(row['drop_total_stage1'])
         drop_list.append(float(row['drop_rate']))
-        drop_max = max(drop_max, float(row['drop_rate']))
-        cost_max = max(cost_max, float(row['cost']))
+        violation_list.append(1 - float(row['within_slo']))
         cost_list.append(float(row['cost']))
-        if row['99'] == '':
-            p99_list.append(p99_list[-1])
-            continue
-        else:
-            violation_counter = 0
-            if float(row['99']) > DEFAULT_SLO:
-                multiplier = 0.1
-                if float(row['95']) > DEFAULT_SLO:
-                    multiplier = 0.05
-                violation_counter = multiplier * float(row['rate'])
-            violation_max = max(violation_max, violation_counter)
-            violation_list.append(violation_counter)
-            p99_max = max(p99_max, float(row['99']))
-            p99_list.append(float(row['99']))
+        p99_list.append(float(row['99']))
+        p95_list.append(float(row['95']))
+        p90_list.append(float(row['90']))
+        p50_list.append(float(row['50']))
     while len(rps_list) < 1200:
         rps_list.append(0)
         p99_list.append(0)
+        p95_list.append(0)
+        p90_list.append(0)
+        p50_list.append(0)
         violation_list.append(0)
         cost_list.append(min(cost_list))
         drop_list.append(0)
-    print(numpy.argmax(drop_list), max(drop_list), rps_list[numpy.argmax(drop_list)], rps_list[numpy.argmax(drop_list) - 5: numpy.argmax(drop_list) + 5])
-    paper_name = 'Biscale'
-    horizontal_name = 'Horizontal Scaling'
-    vertical_name = 'Vertical Scaling'
+    current_violation_hv = []
+    for i in range(len(rps_list)):
+        if rps_list[i] == 0:
+            current_violation_hv.append(0)
+        else:
+            extra_violation_multiplier = 0
+            # if p99_list[i] > DEFAULT_SLO / 1000.0:
+            #     if p50_list[i] > DEFAULT_SLO / 1000.0:
+            #         extra_violation_multiplier = 0.5
+            #     elif p90_list[i] > DEFAULT_SLO / 1000.0:
+            #         extra_violation_multiplier = 0.1
+            #     else:
+            #         extra_violation_multiplier = 0.05
+            total_violation = (extra_violation_multiplier + violation_list[i] + drop_list[i] / rps_list[i])
+            if total_violation > 1:
+                total_violation = 1
+            current_violation_hv.append(total_violation)
+    return (p99_list[start_range: end_range], cost_list[start_range: end_range], drop_list[start_range: end_range],
+            violation_list[start_range: end_range], rps_list[start_range: end_range],
+            current_violation_hv[start_range: end_range])
+
+
+def bos_draw_experiment_results(pipeline):
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1)
+    saeed_thickness = 1.5
+    p99_list_hv, cost_list_hv, drop_list_hv, violation_list_hv, rps_list_hv, current_violation_hv = get_data_from_csv(
+        'experiment_results/series-' + pipeline + '-hv-1350-1350.csv')
+    p99_list_ho, cost_list_ho, drop_list_ho, violation_list_ho, rps_list_ho, current_violation_ho = get_data_from_csv(
+        'experiment_results/series-' + pipeline + '-ho-1350-1350.csv')
+    p99_list_vo, cost_list_vo, drop_list_vo, violation_list_vo, rps_list_vo, current_violation_vo = get_data_from_csv(
+        'experiment_results/series-' + pipeline + '-vo-1350-1350.csv')
+    fig_length = len(p99_list_hv)
     ax1.set_ylabel('Workload (RPS)')
-    ax1.set_xlim([0, 1200])
-    ax1.set_ylim([0, 55])
-    ax1.set_yticks([x for x in range(0, 51, 10)])
+    ax1.set_xlim([0, fig_length])
+    ax1.set_ylim([0, int(max(rps_list_hv)) + 5])
+    ax1.set_yticks([x for x in range(0, int(max(rps_list_hv)) + 5, 10)])
     ax1.set_xticks([])
-    ax1.plot(rps_list, color='black', linewidth=saeed_thickness, label='Workload')
+    ax1.plot(rps_list_hv, color='black', linewidth=saeed_thickness, label='Workload')
     ax1.plot([0], '--', color='dimgray', linewidth=saeed_thickness, label='SLO')
     ax1.plot([0], color=colors[0], linewidth=saeed_thickness, label=paper_name)
     ax1.plot([0], color=colors[1], linewidth=saeed_thickness, label=horizontal_name)
     ax1.plot([0], color=colors[2], linewidth=saeed_thickness, label=vertical_name)
     ax1.grid()
-    ax1.legend(loc='upper center', bbox_to_anchor=(0.5, 1.25), fancybox=True, shadow=True, ncol=5, columnspacing=0.3)
+    ax1.legend(loc='upper center', bbox_to_anchor=(0.48, 1.28), fancybox=True, shadow=True, ncol=5, columnspacing=0.3)
 
-    ax2.set_ylabel('P99 (s)')
-    ax2.set_xlim([0, 1200])
-    ax2.set_ylim([0, 1.7])
+    ax2.set_ylabel('P99 Latency (s)')
+    ax2.set_xlim([0, fig_length])
+    ax2.set_ylim([0, 1.6])
     ax2.set_yticks([0, 0.3, 0.6, 0.9, 1.2, 1.5])
     ax2.set_xticks([])
-    ax2.plot([DEFAULT_SLO / 1000] * 1200, '--', color='dimgray', linewidth=saeed_thickness, label='SLO')
-    ax2.plot(p99_list, color=colors[0], linewidth=saeed_thickness, label=paper_name)
+    ax2.plot([DEFAULT_SLO / 1000] * fig_length, '--', color='dimgray', linewidth=saeed_thickness, label='SLO')
+    ax2.plot(p99_list_hv, color=colors[0], linewidth=saeed_thickness)
+    ax2.plot(p99_list_vo, color=colors[2], linewidth=saeed_thickness)
+    ax2.plot(p99_list_ho, color=colors[1], linewidth=saeed_thickness)
     ax2.grid()
 
-    ax3.set_ylabel('Cost (CPU)')
-    ax3.set_xlim([0, 1200])
-    ax3.set_ylim([0, cost_max + 5])
-    ax3.set_yticks([x for x in range(0, int(cost_max) + 4, 10)])
+    ax3.set_ylabel('Cost (CPU cores)')
+    ax3.set_xlim([0, fig_length])
+    ax3.set_ylim([0, max(cost_list_hv) + 5])
+    ax3.set_yticks([x for x in range(0, int(max(cost_list_hv)) + 4, 10)])
     ax3.set_xticks([])
-    ax3.plot(cost_list, color=colors[0], linewidth=saeed_thickness, label=paper_name)
+    ax3.plot(cost_list_hv, color=colors[0], linewidth=saeed_thickness)
+    ax3.plot(cost_list_vo, color=colors[2], linewidth=saeed_thickness)
+    ax3.plot(cost_list_ho, color=colors[1], linewidth=saeed_thickness)
     ax3.grid()
 
     ax4.set_ylabel('Violation (%)')
-    ax4.set_xlim([0, 1200])
-    ax4.set_ylim([0, 1])
-    ax4.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    ax4.set_xticks([x for x in range(0, 1201, 200)])
+    ax4.set_xlim([0, fig_length])
+    ax4.set_ylim([0, 100])
+    ax4.set_yticks([0, 20, 40, 60, 80, 99])
+    ax4.set_xticks([x for x in range(0, fig_length + 1, 200)])
     ax4.set_xlabel('Time (s)')
-    current_violation = []
-    for i in range(len(rps_list)):
-        if rps_list[i] == 0:
-            current_violation.append(0)
-        else:
-            current_violation.append((violation_list[i] + drop_list[i]) / rps_list[i])
-    ax4.plot(current_violation, color=colors[0], linewidth=saeed_thickness, label=paper_name)
+    # print(numpy.argmax(current_violation))
+    ax4.plot([x * 100 for x in current_violation_vo], color=colors[2], linewidth=saeed_thickness)
+    ax4.plot([x * 100 for x in current_violation_ho], color=colors[1], linewidth=saeed_thickness)
+    ax4.plot([x * 100 for x in current_violation_hv], color=colors[0], linewidth=saeed_thickness)
     ax4.grid(axis='y')
 
     fig.tight_layout(pad=0.65)
-    plt.show()
-    where_to_save_pdf = figure_path + 'e2e_evaluation.pdf'
-    where_to_save_png = figure_path + 'e2e_evaluation.png'
+    where_to_save_pdf = figure_path + 'e2e_evaluation_' + pipeline + '_780.pdf'
+    where_to_save_png = figure_path + 'e2e_evaluation_' + pipeline + '_780.png'
     fig.savefig(where_to_save_pdf)
     fig.savefig(where_to_save_png)
+    plt.show()
+    plt.close()
+    crop_pdf(where_to_save_pdf)
+
+
+def bos_draw_drop():
+    patterns = ["+", "/", "\\"]
+    starting_range = 0
+    ending_range = 100
+    _, _, _, _, rps_list_hv0, current_violation_hv0 = get_data_from_csv(
+        'experiment_results/series-video-hv-780-0.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_ho0, current_violation_ho0 = get_data_from_csv(
+        'experiment_results/series-video-ho-780-0.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_vo0, current_violation_vo0 = get_data_from_csv(
+        'experiment_results/series-video-vo-780-0.csv', starting_range, ending_range)
+
+    _, _, _, _, rps_list_hv1, current_violation_hv1 = get_data_from_csv(
+        'experiment_results/series-video-hv-780-780.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_ho1, current_violation_ho1 = get_data_from_csv(
+        'experiment_results/series-video-ho-780-780.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_vo1, current_violation_vo1 = get_data_from_csv(
+        'experiment_results/series-video-vo-780-780.csv', starting_range, ending_range)
+
+    _, _, _, _, rps_list_hv2, current_violation_hv2 = get_data_from_csv(
+        'experiment_results/series-video-hv-780-1560.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_ho2, current_violation_ho2 = get_data_from_csv(
+        'experiment_results/series-video-ho-780-1560.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_vo2, current_violation_vo2 = get_data_from_csv(
+        'experiment_results/series-video-vo-780-1560.csv', starting_range, ending_range)
+
+    _, _, _, _, rps_list_hv3, current_violation_hv3 = get_data_from_csv(
+        'experiment_results/series-video-hv-780-2340.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_ho3, current_violation_ho3 = get_data_from_csv(
+        'experiment_results/series-video-ho-780-2340.csv', starting_range, ending_range)
+    _, _, _, _, rps_list_vo3, current_violation_vo3 = get_data_from_csv(
+        'experiment_results/series-video-vo-780-2340.csv', starting_range, ending_range)
+
+    labels = [paper_name, horizontal_name, vertical_name]
+    names = ['1xSLO',
+             # '2xSLO',
+             '3xSLO',
+             'No Dropping']
+    # This controls how many bars we get in each group
+    values = [[sum(current_violation_hv1) * 100 / len(rps_list_hv1),
+               # sum(current_violation_hv2) * 100 / len(rps_list_hv2),
+               sum(current_violation_hv3) * 100 / len(rps_list_hv3),
+               sum(current_violation_hv0) * 100 / len(rps_list_hv0)],
+              [sum(current_violation_ho1) * 100 / len(rps_list_ho1),
+               # sum(current_violation_ho2) * 100 / len(rps_list_ho2),
+               sum(current_violation_ho3) * 100 / len(rps_list_ho3),
+               sum(current_violation_ho0) * 100 / len(rps_list_ho0)],
+              [sum(current_violation_vo1) * 100 / len(rps_list_vo1),
+               # sum(current_violation_vo2) * 100 / len(rps_list_vo2),
+               sum(current_violation_vo3) * 100 / len(rps_list_vo3),
+               sum(current_violation_vo0) * 100 / len(rps_list_vo0)]]
+    # print(values)
+    n = len(values)  # Number of bars to plot
+    mehran_thickness = .25  # With of each column
+    x = np.arange(0, len(names))  # Center position of group on x axis
+
+    for i, value in enumerate(values):
+        position = x + (mehran_thickness * (1 - n) / 2) + i * mehran_thickness
+        plt.bar(position, value, color=colors[i], hatch=patterns[i], width=mehran_thickness, label=labels[i])
+    plt.ylim([0, 65])
+    plt.yticks([0, 20, 40, 60])
+    plt.xticks(x, names)
+    plt.ylabel('SLO Violation (%)')
+    plt.xlabel('Dropping Strategy')
+    plt.legend(loc='upper left')
+    plt.grid(axis='y')
+    plt.tight_layout(pad=0.65)
+    where_to_save_pdf = figure_path + 'dropping_video_780.pdf'
+    where_to_save_png = figure_path + 'dropping_video_780.png'
+    plt.savefig(where_to_save_pdf)
+    plt.savefig(where_to_save_png)
+    plt.show()
     plt.close()
     crop_pdf(where_to_save_pdf)
 
 
 project_path = '/home/kamran/vertical_scaling/pythonProject/'
 figure_path = project_path + 'figures/bos/'
-DEFAULT_SLO = 1300
+paper_name = 'Biscale'
+horizontal_name = 'Horizontal Scaling'
+vertical_name = 'Vertical Scaling'
+DEFAULT_SLO = 1350
 legend_fontsize = 13
 plt.rc('legend', fontsize=legend_fontsize)
 font_small_size = 18
 plt.rcParams.update({'font.size': font_small_size})
 canvas_size = 4
-plt.rcParams['figure.figsize'] = 2 * canvas_size, 2 * 6
+plt.rcParams['figure.figsize'] = 2 * canvas_size, 12
 plt.rcParams["font.family"] = "Arial"
 plt.rcParams['hatch.linewidth'] = 0.7
 plt.rcParams['pdf.fonttype'] = 42
 plt.rcParams['ps.fonttype'] = 42
 colors = ['#005906', 'chocolate', '#f7cc3e', 'plum', '#3894fc']
-
+# colors = ['#5e3c99', '#e66101', '#fdb863', '#b2abd2']
 # vertical_vs_horizontal()
 # vertical_vs_horizontal_short()
 # vertical_vs_horizontal_long()
 # latency_vs_vertical_vs_batch()
 # dynamic_sla_figure()
 # preliminary_evaluation()
-# draw_cpu_batch_figure()
-# draw_inter_intra()
-# draw_lstm_result()
-draw_experiment_results()
+# bos_draw_cpu_batch_figure()
+# bos_draw_inter_intra()
+# bos_draw_lstm_result()
+bos_draw_experiment_results('sentiment')
+# bos_draw_drop()
