@@ -17,7 +17,7 @@ if __name__ == "__main__":
                 with open(f"{data_dir}/data/{SOURCE}_latencies_cpu{cpu}_batch{batch}.json") as f:
                     latencies = json.load(f)
                     latencies = list(map(lambda x: x["e2e"], latencies))
-                    latency = np.percentile(latencies, 95)
+                    latency = np.percentile(latencies, 99)
                     profiling_data.append({"cpu": cpu, "batch": batch, "latency": latency})
             except:
                 pass

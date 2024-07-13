@@ -3,8 +3,8 @@ import requests
 import json
 import os
 import subprocess
+import sys
 import time
-from datasets import load_dataset
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
 
@@ -21,8 +21,7 @@ IMAGE_NAME = "mehransi/main:pelastic-audio-to-text"
 
 
 def get_data():
-    ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-    return base64.b64encode(open(ds[0]["file"], 'rb').read()).decode("utf-8")
+    return base64.b64encode(open(f'{sys.argv[1]}', 'rb').read()).decode("utf-8")
 
 
 def deploy_audio(next_target_endpoint):

@@ -5,7 +5,7 @@
             "stage_name": "audio-to-text",
             "port": 8000,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "audio-to-text"},
-            "latency_model": [44.923306814727816, 76.80471946750616, 224.49027102975265, 58.078183039499415],
+            "latency_model": [59.135401329025065, 38.20569791416921, 160.62814762316182, 62.94940507943755],
             "container_configs": {
                 "name": "audio-to-text-container",
                 "image": "mehransi/main:pelastic-audio-to-text",
@@ -25,7 +25,7 @@
             "stage_name": "sentiment-analysis",
             "port": 8000,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "sentiment-analysis"},
-            "latency_model": [51.85141907037821, 5.198317516062025, 9.25739544327618, 1.3782576036371632],
+            "latency_model": [52.09085666977715, 5.927263430261823, 9.673022430669654, 2.9608878972217028],
             "container_configs": {
                 "name": "sentiment-analysis-container",
                 "image": "mehransi/main:pelastic-sentiment-analysis",

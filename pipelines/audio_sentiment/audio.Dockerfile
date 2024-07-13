@@ -11,6 +11,7 @@ RUN pip install datasets==2.19.1
 RUN pip install soundfile==0.12.1
 RUN pip install librosa==0.10.2.post1
 RUN pip install numpy==1.26.3
+RUN pip install aiohttp==3.9.5
 
 COPY facebook facebook
 COPY audio.flac audio.flac

@@ -39,7 +39,7 @@ for d in profiling_data:
         b.append(d["batch"])
         rl.append(batch_cost_latency_model((d["cpu"], d["batch"]), alpha, beta, gamma, zeta))
 
-plt.scatter(b, l, label="p95")
+plt.scatter(b, l, label="p99")
 plt.scatter(b, rl, label="regression")
 plt.title(f"{model} profiling for cpu={CPU}")
 plt.xlabel("batch")
