@@ -8,7 +8,7 @@ RUN pip install transformers==4.41.1
 RUN pip install aiohttp==3.9.5
 RUN pip install sentencepiece==0.2.0
 
-COPY google google
+COPY stevhliu stevhliu
 COPY model_server.py model_server.py
 COPY summarizer.py summarizer.py
 

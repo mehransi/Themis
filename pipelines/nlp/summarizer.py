@@ -1,7 +1,7 @@
 import os
 
 from aiohttp import web
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import pipeline
 
 
 from model_server import ModelServer, add_base_routes
@@ -9,22 +9,14 @@ from model_server import ModelServer, add_base_routes
 class Summarizer(ModelServer):
 
     def load_model(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("./google/roberta2roberta_L-24_bbc_tokenizer")
-        summarizer = AutoModelForSeq2SeqLM.from_pretrained("./google/roberta2roberta_L-24_bbc_model")
-        return summarizer
+        return pipeline("summarization", "./stevhliu/my_awesome_billsum_model", max_length=11, min_length=11)
     
     def warmup(self):
-        text = "Integration of horizontal and vertical scales for inference Serving systems"
-        input_ids = self.tokenizer([text], return_tensors="pt").input_ids
-        output_ids = self.model.generate(input_ids)
-        self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        text = "Hello. I'm an AI."
+        self.model([text])
     
-    def batch_preprocess(self, batch: list):
-        return self.tokenizer(batch, return_tensors="pt").input_ids
-        
-    def inference(self, batch):
-        output_ids = self.model.generate(batch)
-        return self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    def get_next_target_data(self, pred):
+        return pred["summary_text"]
 
 
 model_server = Summarizer()

@@ -8,10 +8,10 @@ from model_server import ModelServer, add_base_routes
 class Translation(ModelServer):
 
     def load_model(self):
-        return pipeline(task="translation_fr_to_en", model="./Helsinki-NLP/opus-mt-fr-en")
+        return pipeline('translation', model='./Mitsua/elan-mt-bt-ja-en')
     
     def warmup(self):
-        text = "Intégration des échelles horizontale et verticale pour l'inférence Servir les systèmes"
+        text = "こんにちは。私はAIです。"
         self.model([text])
         
     def get_next_target_data(self, pred):

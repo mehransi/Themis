@@ -8,7 +8,7 @@ RUN pip install transformers==4.41.1
 RUN pip install aiohttp==3.9.5
 RUN pip install sentencepiece==0.2.0
 
-COPY Helsinki-NLP Helsinki-NLP
+COPY Mitsua Mitsua
 COPY model_server.py model_server.py
 COPY translation.py translation.py
 
