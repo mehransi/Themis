@@ -1,46 +1,44 @@
-import base64
 import requests
 import json
 import os
 import subprocess
-import sys
 import time
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
 
 namespace = "mehran"
 
-POD_NAME = "audio-to-text"
+POD_NAME = "summarizer"
 
 PORT = 8000
 
 EXPORTER_IP = os.environ["NODE_IP"]
-EXPORTER_PORT = 8083
-SOURCE_NAME = "AudioToText"
-IMAGE_NAME = "mehransi/main:pelastic-audio-to-text"
+EXPORTER_PORT = 8087
+SOURCE_NAME = "Summarizer"
+IMAGE_NAME = "mehransi/main:pelastic-summarizer"
 
 
 def get_data():
-    return base64.b64encode(open(f'{sys.argv[1]}', 'rb').read()).decode("utf-8")
+    return "Integration of horizontal and vertical scales for inference Serving systems"
 
 
-def deploy_audio(next_target_endpoint):
+def deploy_sentiment(next_target_endpoint):
     create_pod(
         POD_NAME,
         [
             {
                 "name": f"{POD_NAME}-container",
                 "image": IMAGE_NAME,
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "request_cpu": "1",
-                "limit_mem": "1G",
+                "limit_mem": "2G",
                 "limit_cpu": "1",
                 "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1",},
                 "container_ports": [PORT],
             }
         ],
         namespace=namespace,
-        labels={"pipeline": "sentiment", "stage": POD_NAME}
+        labels={"pipeline": "nlp", "stage": POD_NAME}
     )
     while True:
             time.sleep(0.2)
@@ -71,7 +69,7 @@ if __name__ == "__main__":
     filename = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) + "/exporter.py"
   
     exporter = subprocess.Popen(["python", filename, f"{EXPORTER_PORT}", SOURCE_NAME])
-    pod_ip = deploy_audio(f"{EXPORTER_IP}:{EXPORTER_PORT}")
+    pod_ip = deploy_sentiment(f"{EXPORTER_IP}:{EXPORTER_PORT}")
     input_data = get_data()
     
     requests.post(
@@ -94,7 +92,7 @@ if __name__ == "__main__":
         response = requests.post(f"http://{pod_ip}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
         assert json.loads(response.text) == {"success": True}
         time.sleep(0.2)
-        for batch in range(1, 7):  # Maximum request body size 1048576 exceeded 
+        for batch in range(1, 9):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})

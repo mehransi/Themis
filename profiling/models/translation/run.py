@@ -1,30 +1,28 @@
-import base64
 import requests
 import json
 import os
 import subprocess
-import sys
 import time
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
 
 namespace = "mehran"
 
-POD_NAME = "audio-to-text"
+POD_NAME = "translation"
 
 PORT = 8000
 
 EXPORTER_IP = os.environ["NODE_IP"]
-EXPORTER_PORT = 8083
-SOURCE_NAME = "AudioToText"
-IMAGE_NAME = "mehransi/main:pelastic-audio-to-text"
+EXPORTER_PORT = 8086
+SOURCE_NAME = "Translation"
+IMAGE_NAME = "mehransi/main:pelastic-translation"
 
 
 def get_data():
-    return base64.b64encode(open(f'{sys.argv[1]}', 'rb').read()).decode("utf-8")
+    return "Intégration des échelles horizontale et verticale pour l'inférence Servir les systèmes"
 
 
-def deploy_audio(next_target_endpoint):
+def deploy_sentiment(next_target_endpoint):
     create_pod(
         POD_NAME,
         [
@@ -40,7 +38,7 @@ def deploy_audio(next_target_endpoint):
             }
         ],
         namespace=namespace,
-        labels={"pipeline": "sentiment", "stage": POD_NAME}
+        labels={"pipeline": "nlp", "stage": POD_NAME}
     )
     while True:
             time.sleep(0.2)
@@ -71,7 +69,7 @@ if __name__ == "__main__":
     filename = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) + "/exporter.py"
   
     exporter = subprocess.Popen(["python", filename, f"{EXPORTER_PORT}", SOURCE_NAME])
-    pod_ip = deploy_audio(f"{EXPORTER_IP}:{EXPORTER_PORT}")
+    pod_ip = deploy_sentiment(f"{EXPORTER_IP}:{EXPORTER_PORT}")
     input_data = get_data()
     
     requests.post(
@@ -94,7 +92,7 @@ if __name__ == "__main__":
         response = requests.post(f"http://{pod_ip}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
         assert json.loads(response.text) == {"success": True}
         time.sleep(0.2)
-        for batch in range(1, 7):  # Maximum request body size 1048576 exceeded 
+        for batch in range(1, 9):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})

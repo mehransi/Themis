@@ -39,7 +39,7 @@ def deploy_sentiment(next_target_endpoint):
             }
         ],
         namespace=namespace,
-        labels={"pipeline": "video", "stage": POD_NAME}
+        labels={"pipeline": "sentiment", "stage": POD_NAME}
     )
     while True:
             time.sleep(0.2)
