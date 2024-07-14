@@ -57,8 +57,10 @@ class Adapter:
         for idx, endpoint in data["dispatcher_endpoints"].items():
             self.dispatcher_sessions[int(idx)] = ClientSession(base_url=f"http://{endpoint}")
             c = int(data["initial_pod_cpus"][idx])
-            tasks.append(asyncio.create_task(self.create_pod(int(idx), c)))
-            self.current_state[int(idx)] = [c, 1, 4]
+            r = int(data["initial_replicas"][idx])
+            for i in range(r):
+                tasks.append(asyncio.create_task(self.create_pod(int(idx), c)))
+            self.current_state[int(idx)] = [c, r, 4]
         
         await asyncio.gather(*tasks)
         
@@ -260,7 +262,7 @@ class Adapter:
         new_state = {}
         update_tasks = []
         for i in range(len(new_vertical_config)):
-            new_state[i] = [new_vertical_config[i][0], 1, new_vertical_config[i][1]]
+            new_state[i] = [new_vertical_config[i][0], self.current_state[i][1], new_vertical_config[i][1]]
             if new_vertical_config[i][0] != self.current_state[i][0]:
                 update_tasks.append(
                     asyncio.create_task(self.update_pod(self.stage_replicas[i][0], i, new_vertical_config[i][0]))
@@ -447,7 +449,8 @@ app.add_routes(
         web.get("/metrics", export_cost),
         web.post("/decide", decide),
         web.post("/decide-ho", decide_ho),
-        web.post("/decide-vo", decide_vo)
+        web.post("/decide-vo", decide_vo),
+        web.post("/decide-vomax", decide_vo),
     ]
 )
 if __name__ == '__main__':

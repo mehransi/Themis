@@ -38,12 +38,23 @@ DROP_MULTIPLIER = 1  # zero means no drop
 pipeline = sys.argv[1]
 assert pipeline in ["video", "sentiment", "nlp"]
 adapter_type = sys.argv[2]
-assert adapter_type in ["hv", "ho", "vo"], "Adapter type must be one of {hv, ho, vo}"
+assert adapter_type in ["hv", "ho", "vo", "vomax"], "Adapter type must be one of {hv, ho, vo, vomax}"
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
 
 SLO = pipeline_config["SLO"]
+num_stages = len(pipeline_config["stages"])
+
+if adapter_type == "vomax":
+    if pipeline == "video":
+        initial_replicas = [3, 2]
+    elif pipeline == "sentiment":
+        initial_replicas = [3, 2]
+    elif pipeline == "nlp":
+        initial_replicas = [1, 3, 3]
+else:
+    initial_replicas = [1 for _ in range(num_stages)]
 
 drop_after = SLO * DROP_MULTIPLIER
 
@@ -155,7 +166,8 @@ def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
         data=json.dumps({
             "prometheus_endpoint": prometheus_endpoint,
             "dispatcher_endpoints": dispatcher_endpoints,
-            "initial_pod_cpus": {0: 1, 1: 1}
+            "initial_pod_cpus": {i: 1 for i in range(num_stages)},
+            "initial_replicas": {i: initial_replicas[i] for i in range(num_stages)}
         }),
         headers={'Content-type':'application/json', 'Accept':'application/json'}
     )
@@ -203,7 +215,18 @@ def query_metrics(prom_endpoint, event: Event):
                 None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(sentiment_latency_bucket[{2}s])) by (le))')
             )
         else:
-            pass # FIXME
+            models["identification_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(identification_latency_bucket[{2}s])) by (le))')
+            )
+            models["translation_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(translation_latency_bucket[{2}s])) by (le))')
+            )
+            models["summarizer_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(summarizer_latency_bucket[{2}s])) by (le))')
+            )
+            models["dispatcher_stage2"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage2_latency_bucket[{2}s])) by (le))')
+            )
         
         dispatcher_stage1 = loop.run_in_executor(
             None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage1_latency_bucket[{2}s])) by (le))')
@@ -363,8 +386,8 @@ if __name__ == "__main__":
     elif pipeline == "sentiment":
         wl_divider = 8.5625
     else:
-        wl_divider = 17.125 # FIXME
-    wl = list(map(lambda x: round(int(x) / wl_divider), wl.split()))
+        wl_divider = 21
+    wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
     day = 60 * 60 * 24
     workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
     tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")

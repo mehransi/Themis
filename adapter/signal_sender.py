@@ -7,11 +7,11 @@ from threading import Thread
 
 logger = logging.getLogger()
 adapter_type = os.getenv("ADAPTER_TYPE")
-assert adapter_type is not None, "Pass ADAPTER_TYPE as env var. It gets one of hv, ho, and vo values"
+assert adapter_type is not None, "Pass ADAPTER_TYPE as env var. It gets one of hv, ho,vo, and vomax values"
 
 def signal():
     path = "decide"
-    if adapter_type in ["ho", "vo"]:
+    if adapter_type in ["ho", "vo", "vomax"]:
         path = path + f"-{adapter_type}"
     
     try:
