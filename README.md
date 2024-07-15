@@ -1,5 +1,6 @@
-# pelastic
+# Biscale
 
+![Biscale architecture](./Biscale.png)
 
 ## Instructions
 1. Create a Kubernetes cluster (on all cluster nodes)
@@ -12,3 +13,6 @@
 
 2. on Master node run: `microk8s add-node`
 3. Copy the join command (with --worker) and run it on worker nodes
+4. Activate a Python3 virtualenv
+5. Install requirements: `pip install -r requirements.txt`
+6. Run an experiment: ` python starter.py sentiment hv`
