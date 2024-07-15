@@ -98,6 +98,10 @@ def my_test():
     plt.ylabel("load (RPS)")
     plt.legend()
     plt.show()
+    rmspe = np.sqrt(np.mean(np.square(((np.array(test_y) - np.array(prediction)) / np.array(test_y))), axis=0))
+    
+    from sklearn.metrics import mean_absolute_percentage_error
+    print("mape", mean_absolute_percentage_error(y_true=test_y, y_pred=prediction))
 
 
 if __name__ == "__main__":

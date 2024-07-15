@@ -120,8 +120,8 @@ class Adapter:
             new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             new_state = {}
             for i in range(len(new_vertical_config)):
-                new_state[i] = [max(new_vertical_config[i][0], self.current_state[i][0]), self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
-                if new_vertical_config[i][0] > self.current_state[i][0]:
+                new_state[i] = [new_vertical_config[i][0], self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
+                if new_vertical_config[i][0] != self.current_state[i][0]:
                     for r in self.stage_replicas[i]:
                         update_tasks.append(
                             asyncio.create_task(self.update_pod(r, i, new_vertical_config[i][0]))
@@ -267,21 +267,16 @@ class Adapter:
                 update_tasks.append(
                     asyncio.create_task(self.update_pod(self.stage_replicas[i][0], i, new_vertical_config[i][0]))
                 )
-        await asyncio.gather(*update_tasks)
         
-        update_dispatchers_tasks = []
-        before_updating_dispatchers_time = time.perf_counter()
         for i in range(len(self.current_state)):
             _, _, prev_batch_size = self.current_state[i]
             _, _, new_batch_size = new_state[i]
             if new_batch_size != prev_batch_size:
-                update_dispatchers_tasks.append(self.update_batch(i, new_batch_size))
-        
-        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
+                update_tasks.append(self.update_batch(i, new_batch_size))
+                
+        await asyncio.gather(*update_tasks)
+        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}, reconfiguration_took {time.perf_counter() - starting_time:.2f}")
         self.current_state = new_state
-        await asyncio.gather(*update_dispatchers_tasks)
-        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
-            
         
         
     async def get_current_rps(self):
