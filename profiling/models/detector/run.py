@@ -35,11 +35,11 @@ def deploy_classifier(next_target_endpoint):
             {
                 "name": f"{POD_NAME}-container",
                 "image": IMAGE_NAME,
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "request_cpu": "1",
-                "limit_mem": "1G",
+                "limit_mem": "2G",
                 "limit_cpu": "1",
-                "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1",},
+                "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1", "YOLO_OFFLINE": "true",},
                 "container_ports": [PORT],
             }
         ],
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         f"http://{pod_ip}:{PORT}/infer", data=json.dumps([{"data": input_data}])
     )
     
-    for cpu in range(1, 11):
+    for cpu in range(1, 9):
         update_pod(
             POD_NAME,
             [
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         response = requests.post(f"http://{pod_ip}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
         assert json.loads(response.text) == {"success": True}
         time.sleep(0.2)
-        for batch in range(1, 11):
+        for batch in range(1, 9):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})

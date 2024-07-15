@@ -82,7 +82,7 @@ if __name__ == "__main__":
         f"http://{pod_ip}:{PORT}/infer", data=json.dumps([{"data": input_data}])
     )
     
-    for cpu in range(1, 11):
+    for cpu in range(1, 9):
         update_pod(
             POD_NAME,
             [
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         response = requests.post(f"http://{pod_ip}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
         assert json.loads(response.text) == {"success": True}
         time.sleep(0.2)
-        for batch in range(1, 11):
+        for batch in range(1, 9):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})

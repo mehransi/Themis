@@ -32,7 +32,7 @@ namespace = "mehran"
 GET_METRICS_INTERVAL = 1
 FIRST_DECIDE_DELAY_MINUTES = 1
 
-SLO_MULTIPLIER = 0.9
+SLO_MULTIPLIER = 1
 DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
