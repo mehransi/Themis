@@ -1,5 +1,7 @@
 {
     "SLO": 2550,
+    "MAX_BATCH_SIZE": 4,
+    "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "language-identification",

@@ -50,7 +50,7 @@ if adapter_type == "vomax":
     if pipeline == "video":
         initial_replicas = [3, 2]
     elif pipeline == "sentiment":
-        initial_replicas = [3, 2]
+        initial_replicas = [4, 2]
     elif pipeline == "nlp":
         initial_replicas = [1, 3, 3]
 else:
@@ -125,11 +125,11 @@ def deploy_adapter(next_target_endpoints: dict):
                     "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
                     "ADAPTER_TYPE": adapter_type,
                     "DECISION_INTERVAL": "1",
-                    "HORIZONTAL_STABILIZATION": "10",
+                    "HORIZONTAL_STABILIZATION": pipeline_config["HORIZONTAL_STABILIZATION"],
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "PYTHONUNBUFFERED": "1",
                     "K8S_NAMESPACE": namespace,
-                    "MAX_BATCH_SIZE": 8,
+                    "MAX_BATCH_SIZE": pipeline_config["MAX_BATCH_SIZE"],
                     "MAX_CPU_CORES": 8,
                     "LATENCY_SLO": int(SLO * SLO_MULTIPLIER),
                     "BASE_POD_NAMES": json.dumps({i: pipeline_config["stages"][i]["stage_name"] for i in range(len(pipeline_config["stages"]))}),

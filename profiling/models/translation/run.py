@@ -19,7 +19,7 @@ IMAGE_NAME = "mehransi/main:pelastic-translation"
 
 
 def get_data():
-    return "Intégration des échelles horizontale et verticale pour l'inférence Servir les systèmes"
+    return "こんにちは。私はAIです。"
 
 
 def deploy_sentiment(next_target_endpoint):

@@ -10,8 +10,12 @@ class Exporter:
     def __init__(self) -> None:
         self.source_name = sys.argv[2]
         self.logs = []
+        self.idx = 0
     
     async def receive(self, data: dict):
+        self.idx += 1
+        if self.idx % 100 == 0:
+            print("data in exporter:", data)
         latency = data[f"leaving-{self.source_name}"] - data[f"arrival-{self.source_name}"]
         del data[f"leaving-{self.source_name}"]
         del data[f"arrival-{self.source_name}"]

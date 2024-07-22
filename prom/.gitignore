@@ -1,1 +1,4 @@
 kube.config
+hostname
+hosts
+resolv.conf

@@ -1,5 +1,7 @@
 {
     "SLO": 1350,
+    "MAX_BATCH_SIZE": 8,
+    "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "audio-to-text",

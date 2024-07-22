@@ -19,7 +19,7 @@ IMAGE_NAME = "mehransi/main:pelastic-summarizer"
 
 
 def get_data():
-    return "Integration of horizontal and vertical scales for inference Serving systems"
+    return "Hello. I'm an AI."
 
 
 def deploy_sentiment(next_target_endpoint):

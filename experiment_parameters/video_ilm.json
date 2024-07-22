@@ -1,5 +1,7 @@
 {
     "SLO": 300,
+    "MAX_BATCH_SIZE": 8,
+    "HORIZONTAL_STABILIZATION": "5",
     "stages": [
         {
             "stage_name": "video-detector",
