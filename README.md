@@ -1,6 +1,6 @@
-# Biscale
+# Themis
 
-![Biscale architecture](./Biscale.png)
+![Biscale architecture](./Themis.png)
 
 ## Instructions
 1. Create a Kubernetes cluster (on all cluster nodes)
