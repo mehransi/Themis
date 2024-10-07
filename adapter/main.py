@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 import numpy as np
 import os
 import random
@@ -14,7 +15,7 @@ from tensorflow.keras import saving
 from typing import Dict, List
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
-from optimizer import horizontal_2d, vertical_2d
+from optimizer import horizontal_2d, vertical_2d, latency as get_latency
 
 
 def load_pipeline_data(d: dict):
@@ -54,27 +55,37 @@ class Adapter:
             base_url=f"http://{data['prometheus_endpoint']}"
         )
         tasks = []
+        self.initial_cpus = {}
+        self.initial_batches = {}
+        self.ro_list = {}
+        self.tp_list = {}
         for idx, endpoint in data["dispatcher_endpoints"].items():
             self.dispatcher_sessions[int(idx)] = ClientSession(base_url=f"http://{endpoint}")
             c = int(data["initial_pod_cpus"][idx])
+            self.initial_cpus[idx] = c
             r = int(data["initial_replicas"][idx])
-            for i in range(r):
+            for _ in range(r):
                 tasks.append(asyncio.create_task(self.create_pod(int(idx), c)))
-            self.current_state[int(idx)] = [c, r, 4]
+            b = int(data["initial_batches"][idx])
+            self.initial_batches[int(idx)] = b
+            self.tp_list[int(idx)] = int(1000 * b / get_latency(c, b, *self.latency_models[int(idx)]))
+            self.ro_list[int(idx)] = data["inferline_base_arrival"] / (r * self.tp_list[int(idx)])
+            self.current_state[int(idx)] = [c, r, b]
         
         await asyncio.gather(*tasks)
-        
+
         tasks = []
+        
         for i in range(len(self.dispatcher_sessions)):
-            tasks.append(asyncio.create_task(self.initialize_dispatcher(i)))
+            tasks.append(asyncio.create_task(self.initialize_dispatcher(i, self.initial_batches[i])))
         
         await asyncio.gather(*tasks)
             
-    async def initialize_dispatcher(self, stage_idx):
+    async def initialize_dispatcher(self, stage_idx, batch_size):
         async with self.dispatcher_sessions[stage_idx].post("/initialize", json={
             "dispatcher_name": f"stage-{stage_idx}",
             "backends_port": self.pod_ports[stage_idx],
-            "batch_size": 4,
+            "batch_size": batch_size,
             "backends": self.stage_replicas[stage_idx]
         }) as response:
             response = await response.json()
@@ -120,8 +131,8 @@ class Adapter:
             new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             new_state = {}
             for i in range(len(new_vertical_config)):
-                new_state[i] = [max(new_vertical_config[i][0], self.current_state[i][0]), self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
-                if new_vertical_config[i][0] > self.current_state[i][0]:
+                new_state[i] = [new_vertical_config[i][0], self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
+                if new_vertical_config[i][0] != self.current_state[i][0]:
                     for r in self.stage_replicas[i]:
                         update_tasks.append(
                             asyncio.create_task(self.update_pod(r, i, new_vertical_config[i][0]))
@@ -277,8 +288,72 @@ class Adapter:
         await asyncio.gather(*update_tasks)
         self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}, reconfiguration_took {time.perf_counter() - starting_time:.2f}")
         self.current_state = new_state
+    
+    async def adapt_inferline(self):
+        starting_time = time.perf_counter()
+        current_rps = await self.get_current_rps()
+
+        replicas = []
+        for i in range(len(self.current_state)):
+            replicas.append(max(1, math.ceil(current_rps / (self.tp_list[i] * self.ro_list[i]))))
+            
+        is_scaling_in = True
+        for i in range(len(self.current_state)):
+            if self.current_state[i][1] < replicas[i]:
+                is_scaling_in = False
+                break
+        self.logger.info(
+            f"datetime={str(datetime.now())}, {current_rps=},  stabilization_counter={self.horizontal_stabilization_counter}, {is_scaling_in=}, Replicas={json.dumps(replicas)}"
+        )
+        if is_scaling_in:
+            if self.horizontal_stabilization_counter < self.horizontal_stabilization:
+                self.horizontal_stabilization_counter += 1
+                return
+        new_state = {}
+        self.horizontal_stabilization_counter = 0
+        tasks = []
+        loop = asyncio.get_event_loop()
+        for i in range(len(replicas)):
+            new_state[i] = [self.current_state[i][0], replicas[i], self.current_state[i][2]]
+            self.logger.info(f"datetime={str(datetime.now())}, Prev state {i}={json.dumps(self.current_state[i])} | New state {i}={json.dumps(new_state[i])}")
+            if new_state[i] == self.current_state[i]:
+                continue
+            
+            if replicas[i] > self.current_state[i][1]:
+                for _ in range(replicas[i] - self.current_state[i][1]):
+                    tasks.append(
+                        asyncio.create_task(self.create_pod(i, self.current_state[i][0]))
+                    )
+            else:
+                extra_pods_count = self.current_state[i][1] - replicas[i]
+                extra_pods = self.stage_replicas[i][:extra_pods_count]
+                self.stage_replicas[i] = self.stage_replicas[i][extra_pods_count:]
+                self.logger.info(f"datetime={str(datetime.now())}, pods_to_delete_stage{i}={json.dumps(extra_pods)}")
+                self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
+                if extra_pods:
+                    await self.reset_backends(i, self.stage_replicas[i])
+                    for r in extra_pods:
+                        delete_response = await loop.run_in_executor(
+                            self.__thread_executor,
+                            lambda: delete_pod(r["name"], namespace=self.k8s_namespace)
+                        )
+                        self.logger.info(f"datetime={str(datetime.now())}, deleted_replica={r['name']}")
+        await asyncio.gather(*tasks)
         
+        update_dispatchers_tasks = []
+        before_updating_dispatchers_time = time.perf_counter()
+        for i in range(len(self.current_state)):
+            _, prev_replicas, _ = self.current_state[i]
+            _, new_replicas, _ = new_state[i]
+            if prev_replicas < new_replicas:  # for deleted replicas, we already resetted the backends
+                update_dispatchers_tasks.append(self.reset_backends(i, self.stage_replicas[i]))
         
+        self.logger.info(f"datetime={str(datetime.now())}, Inferline, {current_rps=}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
+        self.current_state = new_state
+        await asyncio.gather(*update_dispatchers_tasks)
+        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
+        
+    
     async def get_current_rps(self):
         async with self.prometheus_session.post(
             f"/api/v1/query",
@@ -436,6 +511,9 @@ async def decide_ho(request):
 async def decide_vo(request):
     return web.json_response(await adapter.adapt_vo())
 
+async def decide_inferline(request):
+    return web.json_response(await adapter.adapt_inferline())
+
 
 app = web.Application()
 app.add_routes(
@@ -446,6 +524,7 @@ app.add_routes(
         web.post("/decide-ho", decide_ho),
         web.post("/decide-vo", decide_vo),
         web.post("/decide-vomax", decide_vo),
+        web.post("/decide-inferline", decide_inferline),
     ]
 )
 if __name__ == '__main__':

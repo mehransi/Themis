@@ -27,10 +27,15 @@ from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
 
+def get_latency(core, batch, alpha, beta, gamma, zeta):
+    return int(alpha * batch / core + beta * batch + gamma / core + zeta)
+
 
 namespace = "mehran"
 GET_METRICS_INTERVAL = 1
 FIRST_DECIDE_DELAY_MINUTES = 1
+
+MAX_CPU_CORES = 8
 
 SLO_MULTIPLIER = 1
 DROP_MULTIPLIER = 1  # zero means no drop
@@ -38,15 +43,31 @@ DROP_MULTIPLIER = 1  # zero means no drop
 pipeline = sys.argv[1]
 assert pipeline in ["video", "sentiment", "nlp"]
 adapter_type = sys.argv[2]
-assert adapter_type in ["hv", "ho", "vo", "vomax"], "Adapter type must be one of {hv, ho, vo, vomax}"
+assert adapter_type in ["hv", "ho", "vo", "vomax", "inferline"], "Adapter type must be one of {hv, ho, vo, vomax, inferline}"
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
+    
+with open("workload.txt") as f:
+    wl = f.read()
+if pipeline == "video":
+    wl_divider = 4.384
+elif pipeline == "sentiment":
+    wl_divider = 8.5625
+else:
+    wl_divider = 21
+wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
+day = 60 * 60 * 24
+workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
+inferline_base_arrival = max(workload[:30])
 
 SLO = pipeline_config["SLO"]
 num_stages = len(pipeline_config["stages"])
 
 if adapter_type == "vomax":
+    initial_cpus = [1] * num_stages
+    initial_batches = [1] * num_stages
+    
     if pipeline == "video":
         initial_replicas = [3, 2]
     elif pipeline == "sentiment":
@@ -55,6 +76,44 @@ if adapter_type == "vomax":
         initial_replicas = [1, 3, 3]
 else:
     initial_replicas = [1 for _ in range(num_stages)]
+    
+    def check_feasiblity(batch_list, cpu_list):
+        l = 0
+        for stage in range(num_stages):
+            l += get_latency(cpu_list[stage], batch_list[stage], *pipeline_config["stages"][stage]["latency_model"])
+            tp = 1000 * batch_list[stage] / l
+            if tp < inferline_base_arrival:
+                return False
+            l += int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
+        if l > pipeline_config["SLO"]:
+            return False
+        return True
+    initial_cpus = [MAX_CPU_CORES] * num_stages
+    initial_batches = [1] * num_stages
+    actions = ["IB", "DH"]
+    while True:
+        best = None
+        for stage in range(num_stages):
+            for action in actions:
+                if action == "IB":
+                    batches_clone = initial_batches[:]
+                    batches_clone[stage] += 1
+                    if check_feasiblity(batches_clone, initial_cpus):
+                        if best is None:
+                            best = {"batch": batches_clone, "cpu": initial_cpus}
+                elif action == "DH":
+                    cpu_clone = initial_cpus[:]
+                    cpu_clone[stage] -= 1
+                    if cpu_clone[stage] < 1:
+                        continue
+                    if check_feasiblity(initial_batches, cpu_clone):
+                        if sum(cpu_clone) < sum(initial_cpus):
+                            best = {"batch": initial_batches, "cpu": cpu_clone}
+        if best is None:
+            break
+        initial_batches = best["batch"]
+        initial_cpus = best["cpu"]
+
 
 drop_after = SLO * DROP_MULTIPLIER
 
@@ -130,7 +189,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "PYTHONUNBUFFERED": "1",
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": pipeline_config["MAX_BATCH_SIZE"],
-                    "MAX_CPU_CORES": 8,
+                    "MAX_CPU_CORES": MAX_CPU_CORES,
                     "LATENCY_SLO": int(SLO * SLO_MULTIPLIER),
                     "BASE_POD_NAMES": json.dumps({i: pipeline_config["stages"][i]["stage_name"] for i in range(len(pipeline_config["stages"]))}),
                     "LATENCY_MODELS": json.dumps({
@@ -150,6 +209,7 @@ def deploy_adapter(next_target_endpoints: dict):
         ],
         replicas=1,
         namespace=namespace,
+        restart_policy="Always",
         labels=adapter_labels
     )
     create_service(
@@ -166,8 +226,10 @@ def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
         data=json.dumps({
             "prometheus_endpoint": prometheus_endpoint,
             "dispatcher_endpoints": dispatcher_endpoints,
-            "initial_pod_cpus": {i: 1 for i in range(num_stages)},
-            "initial_replicas": {i: initial_replicas[i] for i in range(num_stages)}
+            "initial_pod_cpus": {i: initial_cpus[i] for i in range(num_stages)},
+            "initial_replicas": {i: initial_replicas[i] for i in range(num_stages)},
+            "initial_batches": {i: initial_batches[i] for i in range(num_stages)},
+            "inferline_base_arrival": inferline_base_arrival,
         }),
         headers={'Content-type':'application/json', 'Accept':'application/json'}
     )
@@ -379,17 +441,7 @@ if __name__ == "__main__":
     query_task.start()
     
     svc = get_service(f"{pipeline_config['stages'][0]['stage_name']}-dispatcher-svc", "mehran")
-    with open("workload.txt") as f:
-        wl = f.read()
-    if pipeline == "video":
-        wl_divider = 4.384
-    elif pipeline == "sentiment":
-        wl_divider = 8.5625
-    else:
-        wl_divider = 21
-    wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
-    day = 60 * 60 * 24
-    workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
+    
     tester = MyLoadTester(workload=workload, endpoint=F"http://{svc['cluster_ip']}:{svc['port']}/predict", http_method="post")
     count, success = tester.start()
     print("Load tester finished", count, success)

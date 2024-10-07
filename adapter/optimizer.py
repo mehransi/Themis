@@ -22,10 +22,12 @@ def horizontal_2d(b_max, slo, models, workload):
             if (s == 0 and dp[s][i]) or s != 0 and dp[s - 1][i]:
                 for b in range(1, b_max + 1):
                     curr_latency = latency(1, b, models[s][0], models[s][1], models[s][2], models[s][3])
+                    throughput = int(1000 * b / curr_latency)
                     curr_latency += int((b - 1) * 1000 / workload)
+                    
                     if i + curr_latency > slo:
                         continue
-                    throughput = int(1000 * b / curr_latency)
+                    
                     needed_instances = math.ceil(workload / throughput)
                     # The first model
                     if s == 0:
@@ -79,10 +81,12 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
                 for c in range(1, c_max + 1):
                     for b in range(1, b_max + 1):
                         curr_latency = latency(c, b, models[s][0], models[s][1], models[s][2], models[s][3])
+                        throughput = int(1000 * b / curr_latency)
                         curr_latency += int((b - 1) * 1000 / workload)
+                        
                         if i + curr_latency > slo:
                             continue
-                        throughput = int(1000 * b / curr_latency)
+                        
                         if throughput * current_instance[s][1] < workload:
                             continue
                         # The first model
@@ -128,8 +132,9 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
         for x in range(len(models)):
             cl = latency(config_vertical_limited[x][0], config_vertical_limited[x][1],
                          models[x][0], models[x][1], models[x][2], models[x][3])
-            cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
             th = int(1000 * config_vertical_limited[x][1] / cl)
+            cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
+            
             current_extra[x] = [config_vertical_limited[x][0], math.ceil(wl / th), config_vertical_limited[x][1]]
             mehran_list.append(math.ceil(wl / th))
         return config_vertical_limited, mehran_list
