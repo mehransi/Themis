@@ -362,7 +362,7 @@ def query_metrics(prom_endpoint, event: Event):
             break
         time.sleep(GET_METRICS_INTERVAL)
         metrics = asyncio.run(get_metrics(prom))
-        filepath = f"./series-{pipeline}-{adapter_type}-{SLO}-{drop_after}.csv"
+        filepath = f"./series-{pipeline}-{adapter_type}-{SLO}-{drop_after}-batch{pipeline_config['MAX_BATCH_SIZE']}.csv"
         file_exists = os.path.exists(filepath)
         with open(filepath, "a") as f:
             field_names = [
@@ -454,6 +454,7 @@ if __name__ == "__main__":
     print("Load tester finished", count, success)
     event.set()
     query_task.join()
+    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": adapter_type}))
     os.system(f"microk8s kubectl delete ns {namespace}")
     os.system(f"docker stop {prometheus_container_name}")
     time.sleep(1)
