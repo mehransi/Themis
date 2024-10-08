@@ -37,7 +37,7 @@ FIRST_DECIDE_DELAY_MINUTES = 1
 
 MAX_CPU_CORES = 8
 
-SLO_MULTIPLIER = 1
+SLO_MULTIPLIER = 0.9
 DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
@@ -78,14 +78,14 @@ else:
     initial_replicas = [1 for _ in range(num_stages)]
     
     def check_feasiblity(batch_list, cpu_list):
-        l = 0
+        e2e = 0
         for stage in range(num_stages):
-            l += get_latency(cpu_list[stage], batch_list[stage], *pipeline_config["stages"][stage]["latency_model"])
+            l = get_latency(cpu_list[stage], batch_list[stage], *pipeline_config["stages"][stage]["latency_model"])
             tp = 1000 * batch_list[stage] / l
             if tp < inferline_base_arrival:
                 return False
-            l += int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
-        if l > pipeline_config["SLO"]:
+            e2e += l + int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
+        if e2e > SLO * SLO_MULTIPLIER:
             return False
         return True
     initial_cpus = [MAX_CPU_CORES] * num_stages
@@ -98,6 +98,8 @@ else:
                 if action == "IB":
                     batches_clone = initial_batches[:]
                     batches_clone[stage] += 1
+                    if batches_clone[stage] > pipeline_config["MAX_BATCH_SIZE"]:
+                        continue
                     if check_feasiblity(batches_clone, initial_cpus):
                         if best is None:
                             best = {"batch": batches_clone, "cpu": initial_cpus}
@@ -124,6 +126,11 @@ ADAPTER_PORT = 8000
 
 EXPORTER_IP = os.environ["NODE_IP"]
 EXPORTER_PORT = 8008
+
+print(f"{initial_cpus=}")
+print(f"{initial_batches=}")
+print(f"{initial_replicas=}")
+print(f"{inferline_base_arrival=}")
 
 
 def deploy_dispatchers():
