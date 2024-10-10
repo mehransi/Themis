@@ -64,33 +64,40 @@ inferline_base_arrival = max(workload[:30])
 SLO = pipeline_config["SLO"]
 num_stages = len(pipeline_config["stages"])
 
+
+if pipeline == "video":
+    initial_replicas = [3, 2]
+elif pipeline == "sentiment":
+    initial_replicas = [4, 2]
+elif pipeline == "nlp":
+    initial_replicas = [1, 3, 3]
+    
 if adapter_type == "vomax":
     initial_cpus = [1] * num_stages
     initial_batches = [1] * num_stages
     
-    if pipeline == "video":
-        initial_replicas = [3, 2]
-    elif pipeline == "sentiment":
-        initial_replicas = [4, 2]
-    elif pipeline == "nlp":
-        initial_replicas = [1, 3, 3]
 else:
-    initial_replicas = [1 for _ in range(num_stages)]
+    def get_cost(cpu_list, replica_list):
+        c = 0
+        for i in range(len(replica_list)):
+            c += replica_list[i] * cpu_list[i]
+        return c
     
-    def check_feasiblity(batch_list, cpu_list):
+    def check_feasiblity(batch_list, cpu_list, replica_list):
         e2e = 0
         for stage in range(num_stages):
             l = get_latency(cpu_list[stage], batch_list[stage], *pipeline_config["stages"][stage]["latency_model"])
-            tp = 1000 * batch_list[stage] / l
+            tp = replica_list[stage] * 1000 * batch_list[stage] / l
             if tp < inferline_base_arrival:
                 return False
             e2e += l + int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
         if e2e > SLO * SLO_MULTIPLIER:
             return False
         return True
+    
     initial_cpus = [MAX_CPU_CORES] * num_stages
     initial_batches = [1] * num_stages
-    actions = ["IB", "DH"]
+    actions = ["IB", "RR", "DH"]
     while True:
         best = None
         for stage in range(num_stages):
@@ -100,21 +107,34 @@ else:
                     batches_clone[stage] += 1
                     if batches_clone[stage] > pipeline_config["MAX_BATCH_SIZE"]:
                         continue
-                    if check_feasiblity(batches_clone, initial_cpus):
+                    if check_feasiblity(batches_clone, initial_cpus, initial_replicas):
                         if best is None:
-                            best = {"batch": batches_clone, "cpu": initial_cpus}
+                            best = {"batch": batches_clone, "cpu": initial_cpus, "replica": initial_replicas}
+                elif action == "RR":
+                    replicas_clone = initial_replicas[:]
+                    replicas_clone[stage] -= 1
+                    if replicas_clone[stage] < 1:
+                        continue
+                    if check_feasiblity(initial_batches, initial_cpus, replicas_clone):
+                        if best is None:
+                            best = {"batch": initial_batches, "cpu": initial_cpus, "replica": replicas_clone}
+                        elif get_cost(initial_cpus, replicas_clone) < get_cost(best["cpu"], best["replica"]):
+                            best = {"batch": initial_batches, "cpu": initial_cpus, "replica": replicas_clone}
                 elif action == "DH":
                     cpu_clone = initial_cpus[:]
                     cpu_clone[stage] -= 1
                     if cpu_clone[stage] < 1:
                         continue
-                    if check_feasiblity(initial_batches, cpu_clone):
-                        if sum(cpu_clone) < sum(initial_cpus):
-                            best = {"batch": initial_batches, "cpu": cpu_clone}
+                    if check_feasiblity(initial_batches, cpu_clone, initial_replicas):
+                        if best is None:
+                            best = {"batch": initial_batches, "cpu": cpu_clone, "replica": initial_replicas}
+                        elif get_cost(cpu_clone, initial_replicas) < get_cost(best["cpu"], best["replica"]):
+                            best = {"batch": initial_batches, "cpu": cpu_clone, "replica": initial_replicas}
         if best is None:
             break
         initial_batches = best["batch"]
         initial_cpus = best["cpu"]
+        initial_replicas = best["replica"]
 
 
 drop_after = SLO * DROP_MULTIPLIER
@@ -187,6 +207,7 @@ def deploy_adapter(next_target_endpoints: dict):
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
+                "image_pull_policy": "Always",
                 "env_vars": {
                     "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
                     "ADAPTER_TYPE": adapter_type,
@@ -216,7 +237,6 @@ def deploy_adapter(next_target_endpoints: dict):
         ],
         replicas=1,
         namespace=namespace,
-        restart_policy="Always",
         labels=adapter_labels
     )
     create_service(

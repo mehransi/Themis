@@ -69,7 +69,7 @@ class Exporter:
         e2e_histogram.observe(data["e2e"])
         
         per_request = {}
-        for k in ["dispatcher-stage0", "identification-e2e", "dispatcher-stage1", "translation-e2e", "dispatcher-stage2", "summarizer-e2e", "e2d"]:
+        for k in ["dispatcher-stage0", "identification-e2e", "dispatcher-stage1", "translation-e2e", "dispatcher-stage2", "summarizer-e2e", "e2e"]:
             per_request[k] = data[k]
         per_request["timestamp"] = str(datetime.now())
         self.per_request_list.append(per_request)
