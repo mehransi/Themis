@@ -7,7 +7,7 @@
             "stage_name": "audio-to-text",
             "port": 8000,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "audio-to-text"},
-            "latency_model": [59.135401329025065, 38.20569791416921, 160.62814762316182, 62.94940507943755],
+            "latency_model": [55.19157828128717, 47.04191565523656, 135.90454305950735, 92.83677220364562],
             "container_configs": {
                 "name": "audio-to-text-container",
                 "image": "mehransi/main:pelastic-audio-to-text",

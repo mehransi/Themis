@@ -123,7 +123,7 @@ class Adapter:
         
         loop = asyncio.get_event_loop()
         
-        
+        futures = []
         if should_apply_horizontal is False:
             update_tasks = []
             create_tasks = []
@@ -131,8 +131,14 @@ class Adapter:
             new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             new_state = {}
             for i in range(len(new_vertical_config)):
-                new_state[i] = [max(new_vertical_config[i][0], self.current_state[i][0]), self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
-                if new_vertical_config[i][0] > self.current_state[i][0]:
+                if os.getenv("VERTICAL_SCALE_DOWN", "false").lower() == "true":
+                    new_cpu = new_horizontal_config[i][0]
+                    must_update = new_cpu != self.current_state[i][0]
+                else:
+                    new_cpu = max(new_vertical_config[i][0], self.current_state[i][0])
+                    must_update = new_vertical_config[i][0] > self.current_state[i][0]
+                new_state[i] = [new_cpu, self.current_state[i][1] + more_instances[i], new_vertical_config[i][1]]
+                if must_update:
                     for r in self.stage_replicas[i]:
                         update_tasks.append(
                             asyncio.create_task(self.update_pod(r, i, new_vertical_config[i][0]))
@@ -151,7 +157,6 @@ class Adapter:
             )
         else:
             tasks = []
-            futures = []
             new_state = {}
             before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
@@ -185,7 +190,6 @@ class Adapter:
                             self.logger.info(f"datetime={str(datetime.now())}, deleted_replica={r['name']}")
                         
             await asyncio.gather(*tasks)
-            await asyncio.gather(*[asyncio.create_task(f) for f in futures])
             self.logger.info(f"datetime={str(datetime.now())}, horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time:.2f}")
         
         
@@ -202,6 +206,7 @@ class Adapter:
         self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
+        await asyncio.gather(*[asyncio.create_task(f) for f in futures])
         self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
         self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
                 
@@ -289,7 +294,7 @@ class Adapter:
         self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}, reconfiguration_took {time.perf_counter() - starting_time:.2f}")
         self.current_state = new_state
     
-    async def adapt_inferline(self):
+    async def adapt_il(self):
         starting_time = time.perf_counter()
         current_rps = await self.get_current_rps()
 
@@ -438,6 +443,8 @@ class Adapter:
 
     async def update_pod(self, pod_info: dict, stage_idx, new_cpu):
         loop = asyncio.get_event_loop()
+        if new_cpu == 1:
+            await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
         await loop.run_in_executor(
             self.__thread_executor,
             lambda: update_pod(
@@ -450,8 +457,9 @@ class Adapter:
                 namespace=self.k8s_namespace
             )
         )
-        await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
-        
+        if new_cpu > 1:
+            await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
+
     async def update_threading(self, pod_endpoint, threads: int):
         async with ClientSession() as session:
             async with session.post(
@@ -511,8 +519,8 @@ async def decide_ho(request):
 async def decide_vo(request):
     return web.json_response(await adapter.adapt_vo())
 
-async def decide_inferline(request):
-    return web.json_response(await adapter.adapt_inferline())
+async def decide_il(request):
+    return web.json_response(await adapter.adapt_il())
 
 
 app = web.Application()
@@ -524,7 +532,7 @@ app.add_routes(
         web.post("/decide-ho", decide_ho),
         web.post("/decide-vo", decide_vo),
         web.post("/decide-vomax", decide_vo),
-        web.post("/decide-inferline", decide_inferline),
+        web.post("/decide-il", decide_il),
     ]
 )
 if __name__ == '__main__':

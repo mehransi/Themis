@@ -1,10 +1,12 @@
 import math
+import os
 
 TOTAL_CORE = 32
 
 
 def latency(core, batch, alpha, beta, gamma, zeta):
-    return int(alpha * batch / core + beta * batch + gamma / core + zeta)
+    mlt = float(os.getenv("LATENCY_MODEL_MULTIPLIER", "1"))
+    return int(mlt * (alpha * batch / core + beta * batch + gamma / core + zeta))
 
 
 def horizontal_2d(b_max, slo, models, workload):

@@ -35,15 +35,15 @@ namespace = "mehran"
 GET_METRICS_INTERVAL = 1
 FIRST_DECIDE_DELAY_MINUTES = 1
 
-MAX_CPU_CORES = 8
+MAX_CPU_CORES = 4
 
-SLO_MULTIPLIER = 0.9
+LATENCY_MODEL_MULTIPLIER = 1.1
 DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
 assert pipeline in ["video", "sentiment", "nlp"]
 adapter_type = sys.argv[2]
-assert adapter_type in ["hv", "ho", "vo", "vomax", "inferline"], "Adapter type must be one of {hv, ho, vo, vomax, inferline}"
+assert adapter_type in ["hv", "ho", "vo", "vomax", "il"], "Adapter type must be one of {hv, ho, vo, vomax, il}"
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
@@ -91,7 +91,7 @@ else:
             if tp < inferline_base_arrival:
                 return False
             e2e += l + int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
-        if e2e > SLO * SLO_MULTIPLIER:
+        if e2e > SLO:
             return False
         return True
     
@@ -215,10 +215,11 @@ def deploy_adapter(next_target_endpoints: dict):
                     "HORIZONTAL_STABILIZATION": pipeline_config["HORIZONTAL_STABILIZATION"],
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "PYTHONUNBUFFERED": "1",
+                    "LATENCY_MODEL_MULTIPLIER": str(LATENCY_MODEL_MULTIPLIER),
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": pipeline_config["MAX_BATCH_SIZE"],
                     "MAX_CPU_CORES": MAX_CPU_CORES,
-                    "LATENCY_SLO": int(SLO * SLO_MULTIPLIER),
+                    "LATENCY_SLO": SLO,
                     "BASE_POD_NAMES": json.dumps({i: pipeline_config["stages"][i]["stage_name"] for i in range(len(pipeline_config["stages"]))}),
                     "LATENCY_MODELS": json.dumps({
                         i: pipeline_config["stages"][i]["latency_model"] for i in range(len(pipeline_config["stages"]))

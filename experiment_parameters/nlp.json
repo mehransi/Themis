@@ -26,7 +26,7 @@
             "stage_name": "translation",
             "port": 8000,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "translation"},
-            "latency_model": [304.596066487657, 74.08666337647502, -13.468936326215587, 11.630634430011373],
+            "latency_model": [311.41628898540574, 93.07503586447368, -5.015309771165718, 27.80381593584562],
             "container_configs": {
                 "name": "translation-container",
                 "image": "mehransi/main:pelastic-translation",

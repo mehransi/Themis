@@ -11,7 +11,7 @@ assert adapter_type is not None, "Pass ADAPTER_TYPE as env var. It gets one of h
 
 def signal():
     path = "decide"
-    if adapter_type in ["ho", "vo", "vomax", "inferline"]:
+    if adapter_type in ["ho", "vo", "vomax", "il"]:
         path = path + f"-{adapter_type}"
     
     try:
