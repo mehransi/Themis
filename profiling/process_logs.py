@@ -4,7 +4,7 @@ import json
 import numpy as np
 
 SOURCE = sys.argv[1]
-
+PERCENTILE = int(sys.argv[2])
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(__file__)
@@ -17,9 +17,9 @@ if __name__ == "__main__":
                 with open(f"{data_dir}/data/{SOURCE}_latencies_cpu{cpu}_batch{batch}.json") as f:
                     latencies = json.load(f)
                     latencies = list(map(lambda x: x["e2e"], latencies))
-                    latency = np.percentile(latencies, 99)
+                    latency = np.percentile(latencies, PERCENTILE)
                     profiling_data.append({"cpu": cpu, "batch": batch, "latency": latency})
             except:
                 pass
-    with open(f"{data_dir}/profiling.json", "w") as f2:
+    with open(f"{data_dir}/profiling-{PERCENTILE}.json", "w") as f2:
         json.dump(profiling_data, f2, indent=2)

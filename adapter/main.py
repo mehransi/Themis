@@ -132,7 +132,7 @@ class Adapter:
             new_state = {}
             for i in range(len(new_vertical_config)):
                 if os.getenv("VERTICAL_SCALE_DOWN", "false").lower() == "true":
-                    new_cpu = new_horizontal_config[i][0]
+                    new_cpu = new_vertical_config[i][0]
                     must_update = new_cpu != self.current_state[i][0]
                 else:
                     new_cpu = max(new_vertical_config[i][0], self.current_state[i][0])

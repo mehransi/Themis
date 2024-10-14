@@ -1,5 +1,5 @@
 {
-    "SLO": 2550,
+    "SLO": 1350,
     "MAX_BATCH_SIZE": 4,
     "HORIZONTAL_STABILIZATION": "5",
     "stages": [
@@ -7,7 +7,7 @@
             "stage_name": "language-identification",
             "port": 8000,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "language-identification"},
-            "latency_model": [21.36871436832019, 1.5569641306191406, 53.785185960044615, 27.77545863159201],
+            "latency_model": [5.09047221165204, 5.08137830667025, 11.794467994168608, 19.952494502108863],
             "container_configs": {
                 "name": "language-identification-container",
                 "image": "mehransi/main:pelastic-language-identification",
@@ -26,7 +26,7 @@
             "stage_name": "translation",
             "port": 8000,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "translation"},
-            "latency_model": [311.41628898540574, 93.07503586447368, -5.015309771165718, 27.80381593584562],
+            "latency_model": [57.59805436049355, 130.68228960065525, 8.903791563869234, 3.3794617652943324],
             "container_configs": {
                 "name": "translation-container",
                 "image": "mehransi/main:pelastic-translation",
@@ -45,7 +45,7 @@
             "stage_name": "summarizer",
             "port": 8000,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "summarizer"},
-            "latency_model": [263.93594914585606, 83.63772165096029, -1.006786216767125, 23.573866180316415],
+            "latency_model": [43.5489028328246, 123.91902983215444, 3.0210123743377855, 8.356729149834319],
             "container_configs": {
                 "name": "summarizer-container",
                 "image": "mehransi/main:pelastic-summarizer",
