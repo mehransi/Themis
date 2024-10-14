@@ -11,7 +11,7 @@
             "container_configs": {
                 "name": "audio-to-text-container",
                 "image": "mehransi/main:pelastic-audio-to-text",
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "limit_mem": "2G",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": "",

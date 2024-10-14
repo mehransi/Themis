@@ -11,8 +11,8 @@
             "container_configs": {
                 "name": "language-identification-container",
                 "image": "mehransi/main:pelastic-language-identification",
-                "request_mem": "1G",
-                "limit_mem": "1G",
+                "request_mem": "2G",
+                "limit_mem": "2G",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": "",
                     "PORT": "8000",
@@ -30,7 +30,7 @@
             "container_configs": {
                 "name": "translation-container",
                 "image": "mehransi/main:pelastic-translation",
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "limit_mem": "2G",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": "", 
@@ -49,7 +49,7 @@
             "container_configs": {
                 "name": "summarizer-container",
                 "image": "mehransi/main:pelastic-summarizer",
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "limit_mem": "2G",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": "", 

@@ -27,8 +27,10 @@ from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
 
+LATENCY_MODEL_MULTIPLIER = 1.1
+
 def get_latency(core, batch, alpha, beta, gamma, zeta):
-    return int(alpha * batch / core + beta * batch + gamma / core + zeta)
+    return int(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + beta * batch + gamma / core + zeta))
 
 
 namespace = "mehran"
@@ -37,7 +39,6 @@ FIRST_DECIDE_DELAY_MINUTES = 1
 
 MAX_CPU_CORES = 4
 
-LATENCY_MODEL_MULTIPLIER = 1.1
 DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
@@ -449,7 +450,7 @@ if __name__ == "__main__":
     elif pipeline == "sentiment":
         encoded = base64.b64encode(open('./audio.flac', 'rb').read()).decode("utf-8")
     else:
-        encoded = "nor is mister cultar's manner less interesting than his matter"
+        encoded = "こんにちは。私はAIです。"
 
     counter = Manager().Value("i", value=0)
     class MyLoadTester(BarAzmoon):
