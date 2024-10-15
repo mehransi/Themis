@@ -52,11 +52,11 @@ with open(f"experiment_parameters/{pipeline}.json") as f:
 with open("workload.txt") as f:
     wl = f.read()
 if pipeline == "video":
-    wl_divider = 4.384
+    wl_divider = 1
 elif pipeline == "sentiment":
-    wl_divider = 8.5625
+    wl_divider = 2
 else:
-    wl_divider = 21
+    wl_divider = 5
 wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
 day = 60 * 60 * 24
 workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
@@ -88,7 +88,7 @@ else:
         e2e = 0
         for stage in range(num_stages):
             l = get_latency(cpu_list[stage], batch_list[stage], *pipeline_config["stages"][stage]["latency_model"])
-            tp = replica_list[stage] * 1000 * batch_list[stage] / l
+            tp = replica_list[stage] * int(1000 * batch_list[stage] / l)
             if tp < inferline_base_arrival:
                 return False
             e2e += l + int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
@@ -214,6 +214,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "ADAPTER_TYPE": adapter_type,
                     "DECISION_INTERVAL": "1",
                     "HORIZONTAL_STABILIZATION": pipeline_config["HORIZONTAL_STABILIZATION"],
+                    "VERTICAL_SCALE_DOWN": "true",
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "PYTHONUNBUFFERED": "1",
                     "LATENCY_MODEL_MULTIPLIER": str(LATENCY_MODEL_MULTIPLIER),

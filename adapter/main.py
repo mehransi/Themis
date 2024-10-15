@@ -32,7 +32,7 @@ class Adapter:
         self.horizontal_stabilization = int(os.getenv("HORIZONTAL_STABILIZATION", 10))
         self.horizontal_stabilization_counter = 0
         self.latency_models = load_pipeline_data(os.environ["LATENCY_MODELS"])
-        self.dispatcher_sessions: Dict[int, ClientSession] = {} 
+        self.dispatcher_sessions: Dict[int, ClientSession] = {}
         self.k8s_namespace = os.environ["K8S_NAMESPACE"]
         self.base_pod_names = load_pipeline_data(os.environ["BASE_POD_NAMES"])
         self.pod_labels = load_pipeline_data(os.environ["POD_LABELS"])
@@ -70,8 +70,10 @@ class Adapter:
             self.initial_batches[int(idx)] = b
             self.tp_list[int(idx)] = int(1000 * b / get_latency(c, b, *self.latency_models[int(idx)]))
             self.ro_list[int(idx)] = data["inferline_base_arrival"] / (r * self.tp_list[int(idx)])
+            
             self.current_state[int(idx)] = [c, r, b]
         
+        self.logger.info(f"datetime={str(datetime.now())}, inferline_base_arrival={data['inferline_base_arrival']}, ro_list={json.dumps(self.ro_list)}")
         await asyncio.gather(*tasks)
 
         tasks = []
@@ -300,7 +302,12 @@ class Adapter:
 
         replicas = []
         for i in range(len(self.current_state)):
-            replicas.append(max(1, math.ceil(current_rps / (self.tp_list[i] * self.ro_list[i]))))
+            stage_replicas = max(1, math.ceil(current_rps / (self.tp_list[i] * self.ro_list[i])))
+            if stage_replicas < self.current_state[i][1]:
+                stage_replicas = max(1, math.ceil(current_rps / (self.tp_list[i] * min(self.ro_list.values()))))
+                if stage_replicas > self.current_state[i][1]:
+                    stage_replicas = self.current_state[i][1]
+            replicas.append(stage_replicas)
             
         is_scaling_in = True
         for i in range(len(self.current_state)):
