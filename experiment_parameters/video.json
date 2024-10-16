@@ -1,5 +1,5 @@
 {
-    "SLO": 780,
+    "SLO": 400,
     "MAX_BATCH_SIZE": 4,
     "HORIZONTAL_STABILIZATION": "3",
     "stages": [
@@ -7,7 +7,7 @@
             "stage_name": "video-detector",
             "port": 8000,
             "pod_labels": {"pipeline": "video", "component": "model-server", "stage": "video-detector"},
-            "latency_model": [148.81709977526535, 37.49369666805188, 5.432908755854746, -15.475937098807677],
+            "latency_model": [29.792671690244585, 37.91779194567423, 7.913329941900953, -2.468482255943263],
             "container_configs": {
                 "name": "video-detector-container",
                 "image": "mehransi/main:pelastic-video-detector",
@@ -27,7 +27,7 @@
             "stage_name": "video-classifier",
             "port": 8000,
             "pod_labels": {"pipeline": "video", "component": "model-server", "stage": "video-classifier"},
-            "latency_model": [34.69333807478468, 2.058115261491216, 19.478793326347812, 14.259440042600422],
+            "latency_model": [17.950522315782415, 12.478108150643457, 6.632609026784949, 8.717238307016014],
             "container_configs": {
                 "name": "video-classifier-container",
                 "image": "mehransi/main:pelastic-video-classifier",
