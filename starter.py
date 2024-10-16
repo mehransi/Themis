@@ -5,6 +5,7 @@ import cv2
 import requests
 import subprocess
 import json
+import math
 import os
 import sys
 import time
@@ -73,10 +74,14 @@ elif pipeline == "sentiment":
 elif pipeline == "nlp":
     initial_replicas = [1, 3, 3]
     
-if adapter_type == "vomax":
+
+if adapter_type == "vo":
     initial_cpus = [1] * num_stages
     initial_batches = [1] * num_stages
-    
+    for stage in range(num_stages):
+        l = get_latency(MAX_CPU_CORES, 1, *pipeline_config["stages"][stage]["latency_model"])
+        tp = 1000 // l
+        initial_replicas[stage] = math.ceil(max(workload) / tp)
 else:
     def get_cost(cpu_list, replica_list):
         c = 0
