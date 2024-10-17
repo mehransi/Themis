@@ -1,5 +1,5 @@
 {
-    "SLO": 400,
+    "SLO": 500,
     "MAX_BATCH_SIZE": 4,
     "HORIZONTAL_STABILIZATION": "3",
     "stages": [

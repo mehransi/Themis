@@ -301,7 +301,8 @@ class Adapter:
     
     async def adapt_il(self):
         starting_time = time.perf_counter()
-        current_rps = await self.get_current_rps()
+        current_rps = await self.get_rps_history(30)
+        current_rps = max(current_rps)
 
         replicas = []
         for i in range(len(self.current_state)):
@@ -380,12 +381,23 @@ class Adapter:
             return int(float(response["data"]["result"][0]["value"][1]))
     
     async def get_next_10_rps(self):
+        history_rps = await self.get_rps_history(60)
+        inp = []
+        for i in range(0, len(history_rps), 10):
+            inp.append(max(history_rps[i:i+10]))
+        history_rps = inp
+        if len(history_rps) < 6:
+            history_rps = history_rps + (6 - len(history_rps)) * [history_rps[-1]]
+
+        return self.predict(history_rps)
+    
+    async def get_rps_history(self, seconds):
         now = datetime.now().timestamp()
         async with self.prometheus_session.post(
             f"/api/v1/query_range",
             params={
                 "query": 'dispatcher_requests_total{stage="stage-0"}',
-                "start": now - 60,
+                "start": now - seconds,
                 "end": now,
                 "step": 1
             }
@@ -395,14 +407,7 @@ class Adapter:
        
         history_rps = list(map(lambda x: int(x[1]), history_rps))
         history_rps = [history_rps[i] - history_rps[i-1] for i in range(1, len(history_rps))]
-        inp = []
-        for i in range(0, len(history_rps), 10):
-            inp.append(max(history_rps[i:i+10]))
-        history_rps = inp
-        if len(history_rps) < 6:
-            history_rps = history_rps + (6 - len(history_rps)) * [history_rps[-1]]
-
-        return self.predict(history_rps)
+        return history_rps
         
         
     async def create_pod(self, stage_idx, cpu: int):

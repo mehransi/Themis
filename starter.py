@@ -29,9 +29,11 @@ from kube_resources.services import create_service, get_service
 from utils import wait_till_pod_is_ready
 
 LATENCY_MODEL_MULTIPLIER = 1.1
+LATENCY_MODEL_BATCH_MULTIPLIER = 1.1
+
 
 def get_latency(core, batch, alpha, beta, gamma, zeta):
-    return int(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + beta * batch + gamma / core + zeta))
+    return int(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + zeta))
 
 
 namespace = "mehran"
@@ -73,7 +75,11 @@ elif pipeline == "sentiment":
     initial_replicas = [4, 2]
 elif pipeline == "nlp":
     initial_replicas = [1, 3, 3]
-    
+
+for stage in range(num_stages):
+    l = get_latency(MAX_CPU_CORES, 1, *pipeline_config["stages"][stage]["latency_model"])
+    tp = 1000 // l
+    initial_replicas[stage] = math.ceil(inferline_base_arrival / tp)
 
 if adapter_type == "vo":
     initial_cpus = [1] * num_stages
@@ -223,6 +229,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "PYTHONUNBUFFERED": "1",
                     "LATENCY_MODEL_MULTIPLIER": str(LATENCY_MODEL_MULTIPLIER),
+                    "LATENCY_MODEL_BATCH_MULTIPLIER": str(LATENCY_MODEL_BATCH_MULTIPLIER),
                     "K8S_NAMESPACE": namespace,
                     "MAX_BATCH_SIZE": pipeline_config["MAX_BATCH_SIZE"],
                     "MAX_CPU_CORES": MAX_CPU_CORES,

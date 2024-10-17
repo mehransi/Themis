@@ -6,7 +6,8 @@ TOTAL_CORE = 32
 
 def latency(core, batch, alpha, beta, gamma, zeta):
     mlt = float(os.getenv("LATENCY_MODEL_MULTIPLIER", "1"))
-    return int(mlt * (alpha * batch / core + beta * batch + gamma / core + zeta))
+    mltb = float(os.getenv("LATENCY_MODEL_BATCH_MULTIPLIER", "1"))
+    return int(mlt * (alpha * batch / core + mltb * (beta * batch) + gamma / core + zeta))
 
 
 def horizontal_2d(b_max, slo, models, workload):
