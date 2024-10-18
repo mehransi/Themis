@@ -13,7 +13,7 @@ if __name__ == "__main__":
     profiling_data = []
     for inter in [1, 4]:
         for intra in [1, 4]:
-            for batch in [1, 2, 4, 8]:
+            for batch in [1, 2, 4]:
                 with open(f"{data_dir}/data-parallelism/{SOURCE}_latencies_inter{inter}_intra{intra}_batch{batch}.json") as f:
                     latencies = json.load(f)
                     latencies = list(map(lambda x: x["e2e"], latencies))
