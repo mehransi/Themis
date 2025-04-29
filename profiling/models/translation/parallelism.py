@@ -87,7 +87,7 @@ if __name__ == "__main__":
     exporter = subprocess.Popen(["python", filename, f"{EXPORTER_PORT}", SOURCE_NAME])
     
     
-    replicas = 24
+    replicas = 8
     cpu = 4
     for inter in [1, cpu]:
         for intra in [1, cpu]:
@@ -105,7 +105,7 @@ if __name__ == "__main__":
                     batch_input.append({"data": input_data})
                 repeat = 0
                 data = json.dumps(batch_input)
-                while repeat < 8 * 512 // batch + 2 * batch:
+                while repeat < 8 * 128 // batch + 2 * batch:
                     for r in range(replicas):
                         repeat += 1
                         thread = Thread(target=send, args=(data, pod_ips[r], batch, cpu))

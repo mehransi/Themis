@@ -14,6 +14,7 @@ from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 namespace = "mehran"
 
 POD_NAME = "video-classifier"
+os.system(f"mk create ns {namespace}")
 
 PORT = 8000
 
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     filename = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) + "/exporter.py"
   
     exporter = subprocess.Popen(["python", filename, f"{EXPORTER_PORT}", SOURCE_NAME])
-    replicas = 24
+    replicas = 8
     pod_ips = []
     input_data = get_data()
     for r in range(replicas):
@@ -92,7 +93,7 @@ if __name__ == "__main__":
             f"http://{pod_ips[r]}:{PORT}/infer", data=json.dumps([{"data": input_data}])
         )
     
-    for cpu in range(1, 5):
+    for cpu in range(1, 9):
         for r in range(replicas):
             update_pod(
                 POD_NAME + f"-{r}",
@@ -114,7 +115,7 @@ if __name__ == "__main__":
             for _ in range(batch):
                 batch_input.append({"data": input_data})
             repeat = 0
-            while repeat < 512 * 8 // batch + 2 * batch:
+            while repeat < 128 * 8 // batch + 2 * batch:
                 data = json.dumps(batch_input)
                 for r in range(replicas):
                     repeat += 1
