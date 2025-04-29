@@ -8,19 +8,19 @@ def batch_cost_latency_model(cpu_batch_tuple, alpha, beta, gamma, zeta):
         cpu, batch = cpu_batch_tuple
         return alpha * batch / cpu + beta * batch + gamma / cpu + zeta
 
-x_data = [1, 2, 4, 8]
-batches = [1, 2, 4, 8]
+x_data = [1, 2, 4, ]
+batches = [1, 2, 4, ]
 color_by_batch = {1: "#5e3c99", 2: "#b2abd2", 4: "#fdb863", 8: "#e66101"}
 
 
-with open(f"{os.path.dirname(__file__)}/models/detector/parameters.json") as f:
+with open(f"{os.path.dirname(__file__)}/models/detector/parameters-99.json") as f:
     detector_parameters = json.load(f)
 
-with open(f"{os.path.dirname(__file__)}/models/classifier/parameters.json") as f:
+with open(f"{os.path.dirname(__file__)}/models/classifier/parameters-99.json") as f:
     classifier_parameters = json.load(f)
     
     
-with open(f"{os.path.dirname(__file__)}/models/detector/profiling.json") as f:
+with open(f"{os.path.dirname(__file__)}/models/detector/profiling-99.json") as f:
     profiling_data_detector = json.load(f)
     profiling_data_detector = list(filter(lambda x: x["cpu"] in x_data, profiling_data_detector))
     profiling_data_detector = list(filter(lambda x: x["batch"] in batches, profiling_data_detector))
@@ -32,7 +32,7 @@ for data in profiling_data_detector:
     detector_data_by_batch[data["batch"]].append(data["latency"] * 1000)
 
 
-with open(f"{os.path.dirname(__file__)}/models/classifier/profiling.json") as f:
+with open(f"{os.path.dirname(__file__)}/models/classifier/profiling-99.json") as f:
         profiling_data_classifier = json.load(f)
         profiling_data_classifier= list(filter(lambda x: x["cpu"] in x_data, profiling_data_classifier))
         profiling_data_classifier = list(filter(lambda x: x["batch"] in batches, profiling_data_classifier))

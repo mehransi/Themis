@@ -15,7 +15,7 @@ from tensorflow.keras import saving
 from typing import Dict, List
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
-from optimizer import horizontal_2d, vertical_2d, latency as get_latency
+from optimizer import horizontal_2d, vertical_2d, latency as get_latency, get_throughput
 
 
 def load_pipeline_data(d: dict):
@@ -30,6 +30,7 @@ class Adapter:
         self.current_state = {}  # {stage: [cores, replicas, batch_size]}
         self.stage_replicas = {}  # {stage: [{name: replica1_pod_name, ip: replica1_pod_ip}, ...]}
         self.horizontal_stabilization = int(os.getenv("HORIZONTAL_STABILIZATION", 10))
+        self.binary_threshold = float(os.getenv("BINARY_THRESHOLD", 0.5))
         self.horizontal_stabilization_counter = 0
         self.latency_models = load_pipeline_data(os.environ["LATENCY_MODELS"])
         self.dispatcher_sessions: Dict[int, ClientSession] = {}
@@ -95,26 +96,11 @@ class Adapter:
     async def adapt(self):
         starting_time = time.perf_counter()
         current_rps = await self.get_current_rps()
-        next_10s_rps = await self.get_next_10_rps()
+        current_throughput = get_throughput(self.current_state, self.latency_models)
         
-        before_horizontal_time = time.perf_counter()
-        new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
-        future_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, next_10s_rps)
-        should_apply_horizontal = True
-        current_vertical_config, current_more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
-        if sum(current_more_instances) > 0:
-            should_apply_horizontal = False
-        for i in range(len(current_vertical_config)):
-            if current_vertical_config[i][0] > self.current_state[i][0]:
-                should_apply_horizontal = False
-                break
-        
-        for i in range(len(new_horizontal_config)):
-            if new_horizontal_config[i][0] < future_horizontal_config[i][0]:
-                should_apply_horizontal = False
-                break
+        should_apply_horizontal = not self.is_wl_increasing_next_10(current_throughput)
         self.logger.info(
-            f"datetime={str(datetime.now())}, {current_rps=}, {next_10s_rps=}, new_h_cfg={json.dumps(new_horizontal_config)}, future_h_cfg={json.dumps(future_horizontal_config)}, stabilization_counter={self.horizontal_stabilization_counter}, horizontal_2d_took={time.perf_counter() - before_horizontal_time:.2f}"
+            f"datetime={str(datetime.now())}, {current_rps=}, {current_throughput=}, stabilization_counter={self.horizontal_stabilization_counter}, {should_apply_horizontal=}", 
         )
         if should_apply_horizontal:
             if self.horizontal_stabilization_counter < self.horizontal_stabilization:
@@ -130,7 +116,12 @@ class Adapter:
             update_tasks = []
             create_tasks = []
             before_vertical_time = time.perf_counter()
+            
+            t_dp = time.perf_counter()
             new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
+            self.logger.info(
+                f"datetime={str(datetime.now())}, vertical_2d_took={time.perf_counter() - t_dp:.3f}, {current_rps=}"
+            )
             new_state = {}
             for i in range(len(new_vertical_config)):
                 if os.getenv("VERTICAL_SCALE_DOWN", "false").lower() == "true":
@@ -155,15 +146,19 @@ class Adapter:
             t_ = time.perf_counter()
             await asyncio.gather(*create_tasks)
             self.logger.info(
-                f"datetime={str(datetime.now())}, vertical_config={json.dumps(new_vertical_config)}, more_instances={more_instances} vertical_2d_took={time.perf_counter() - before_vertical_time:.2f}, updating_pods_took={update_in_vertical_took:.2f}, creating_pods_took={time.perf_counter() - t_:.2f}"
+                f"datetime={str(datetime.now())}, vertical_config={json.dumps(new_vertical_config)}, more_instances={more_instances} vertical_2d_took={time.perf_counter() - before_vertical_time:.3f}, updating_pods_took={update_in_vertical_took:.3f}, creating_pods_took={time.perf_counter() - t_:.3f}"
             )
         else:
+            t_dp = time.perf_counter()            
+            new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
+            self.logger.info(
+                f"datetime={str(datetime.now())}, horizontal_2d_took={time.perf_counter() - t_dp:.3f}, {current_rps=}"
+            )
             tasks = []
             new_state = {}
             before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
                 new_state[i] = [1, new_horizontal_config[i][0], new_horizontal_config[i][1]]
-                self.logger.info(f"datetime={str(datetime.now())}, Prev state {i}={json.dumps(self.current_state[i])} | New state {i}={json.dumps(new_state[i])}")
                 if new_state[i] == self.current_state[i]:
                     continue
                 
@@ -181,7 +176,6 @@ class Adapter:
                     for r in self.stage_replicas[i]:
                         tasks.append(asyncio.create_task(self.update_pod(r, i, 1)))
                     self.logger.info(f"datetime={str(datetime.now())}, pods_to_delete_stage{i}={json.dumps(extra_pods)}")
-                    self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
                     if extra_pods:
                         await self.reset_backends(i, self.stage_replicas[i])
                         for r in extra_pods:
@@ -192,7 +186,7 @@ class Adapter:
                             self.logger.info(f"datetime={str(datetime.now())}, deleted_replica={r['name']}")
                         
             await asyncio.gather(*tasks)
-            self.logger.info(f"datetime={str(datetime.now())}, horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time:.2f}")
+            self.logger.info(f"datetime={str(datetime.now())}, horizontal_crud_took={time.perf_counter() - before_horizontal_apply_time:.3f}")
         
         
         update_dispatchers_tasks = []
@@ -205,12 +199,11 @@ class Adapter:
             if new_batch_size != prev_batch_size:
                 update_dispatchers_tasks.append(self.update_batch(i, new_batch_size))
         
-        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
+        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)}, New state={json.dumps(new_state)}, stage_replicas={json.dumps(self.stage_replicas)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
         await asyncio.gather(*[asyncio.create_task(f) for f in futures])
-        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
-        self.logger.info(f"datetime={str(datetime.now())}, stage_replicas={json.dumps(self.stage_replicas)}, current_state={json.dumps(self.current_state)}")
+        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.3f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.3f}")
                 
     
     async def adapt_ho(self):
@@ -270,7 +263,7 @@ class Adapter:
         self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
-        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
+        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.3f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.3f}")
     
     
     async def adapt_vo(self):
@@ -296,7 +289,7 @@ class Adapter:
                 update_tasks.append(self.update_batch(i, new_batch_size))
                 
         await asyncio.gather(*update_tasks)
-        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}, reconfiguration_took {time.perf_counter() - starting_time:.2f}")
+        self.logger.info(f"datetime={str(datetime.now())}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}, reconfiguration_took {time.perf_counter() - starting_time:.3f}")
         self.current_state = new_state
     
     async def adapt_il(self):
@@ -367,10 +360,11 @@ class Adapter:
         self.logger.info(f"datetime={str(datetime.now())}, Inferline, {current_rps=}, Prev state={json.dumps(self.current_state)} | New state={json.dumps(new_state)}")
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
-        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.2f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.2f}")
+        self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.3f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.3f}")
         
     
     async def get_current_rps(self):
+        t = time.perf_counter()
         async with self.prometheus_session.post(
             f"/api/v1/query",
             params={
@@ -378,10 +372,14 @@ class Adapter:
             }
         ) as response:
             response = await response.json()
+            self.logger.info(f"datetime={str(datetime.now())}, get_current_rps_took: {time.perf_counter() - t:.3f}")
             return int(float(response["data"]["result"][0]["value"][1]))
     
-    async def get_next_10_rps(self):
+    async def is_wl_increasing_next_10(self, target: int):
+        t = time.perf_counter()
         history_rps = await self.get_rps_history(60)
+        get_history_rps_took = round(time.perf_counter() - t, 3)
+        t = time.perf_counter()
         inp = []
         for i in range(0, len(history_rps), 10):
             inp.append(max(history_rps[i:i+10]))
@@ -389,7 +387,9 @@ class Adapter:
         if len(history_rps) < 6:
             history_rps = history_rps + (6 - len(history_rps)) * [history_rps[-1]]
 
-        return self.predict(history_rps)
+        pred = self.predict(history_rps, target)
+        self.logger.info(f"datetime={str(datetime.now())}, {get_history_rps_took=}, LSTM_prediction_took: {time.perf_counter() - t:.3f}")
+        return pred
     
     async def get_rps_history(self, seconds):
         now = datetime.now().timestamp()
@@ -444,7 +444,7 @@ class Adapter:
             except:
                 pass
         pod_initialization_time = time.perf_counter() - t
-        self.logger.info(f"datetime={str(datetime.now())}, New pod for stage {stage_idx} created. pod name: {pod['name']}, cpu: {cpu}, creation={pod_creation_time:.2f}, ip={pod_wait_for_ip_time:.2f}, init={pod_initialization_time:.2f}")
+        self.logger.info(f"datetime={str(datetime.now())}, New pod for stage {stage_idx} created. pod name: {pod['name']}, cpu: {cpu}, creation={pod_creation_time:.3f}, ip={pod_wait_for_ip_time:.3f}, init={pod_initialization_time:.3f}")
         self.stage_replicas[stage_idx].append({"name": pod["name"], "ip": pod["pod_ip"]})
         return pod
         
@@ -496,12 +496,13 @@ class Adapter:
             response = await response.json()
                 
         
-    def predict(self, history_10m_rps):
+    def predict(self, history_rps, target):
         t = time.perf_counter()
         
-        history_5m = tf.convert_to_tensor(np.array(history_10m_rps).reshape((-1, 6, 1)), dtype=tf.float32)
-        next_10s = self.lstm_model.predict(history_5m, verbose=0)
-        return int(next_10s)
+        history = tf.convert_to_tensor(np.array(history_rps).reshape((-1, 6, 1)), dtype=tf.float32)
+        preds = self.lstm_model.predict([history, tf.convert_to_tensor([target])], verbose=0)
+        y_pred_classes = (preds >= self.binary_threshold).astype(int)
+        return bool(y_pred_classes)
 
 
 adapter = Adapter()
