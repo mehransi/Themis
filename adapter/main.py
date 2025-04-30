@@ -58,6 +58,7 @@ class Adapter:
         tasks = []
         self.initial_cpus = {}
         self.initial_batches = {}
+        self.batch_timeout = {}
         self.ro_list = {}
         self.tp_list = {}
         for idx, endpoint in data["dispatcher_endpoints"].items():
@@ -65,6 +66,7 @@ class Adapter:
             c = int(data["initial_pod_cpus"][idx])
             self.initial_cpus[idx] = c
             r = int(data["initial_replicas"][idx])
+            self.batch_timeout[int(idx)] = int(data["batch_timeout"][idx])
             for _ in range(r):
                 tasks.append(asyncio.create_task(self.create_pod(int(idx), c)))
             b = int(data["initial_batches"][idx])
@@ -80,15 +82,16 @@ class Adapter:
         tasks = []
         
         for i in range(len(self.dispatcher_sessions)):
-            tasks.append(asyncio.create_task(self.initialize_dispatcher(i, self.initial_batches[i])))
+            tasks.append(asyncio.create_task(self.initialize_dispatcher(i, self.initial_batches[i], self.batch_timeout[i])))
         
         await asyncio.gather(*tasks)
             
-    async def initialize_dispatcher(self, stage_idx, batch_size):
+    async def initialize_dispatcher(self, stage_idx, batch_size, batch_timeout):
         async with self.dispatcher_sessions[stage_idx].post("/initialize", json={
             "dispatcher_name": f"stage-{stage_idx}",
             "backends_port": self.pod_ports[stage_idx],
             "batch_size": batch_size,
+            "batch_timeout": batch_timeout,
             "backends": self.stage_replicas[stage_idx]
         }) as response:
             response = await response.json()
@@ -204,6 +207,7 @@ class Adapter:
         await asyncio.gather(*update_dispatchers_tasks)
         await asyncio.gather(*[asyncio.create_task(f) for f in futures])
         self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.3f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.3f}")
+        self.logger.info(f"")
                 
     
     async def adapt_ho(self):

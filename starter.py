@@ -28,8 +28,8 @@ from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
 
-LATENCY_MODEL_MULTIPLIER = 1.1
-LATENCY_MODEL_BATCH_MULTIPLIER = 1.1
+LATENCY_MODEL_MULTIPLIER = 1
+LATENCY_MODEL_BATCH_MULTIPLIER = 1
 
 
 def get_latency(core, batch, alpha, beta, gamma, zeta):
@@ -42,7 +42,7 @@ FIRST_DECIDE_DELAY_MINUTES = 1
 
 MAX_CPU_CORES = 4
 
-DROP_MULTIPLIER = 1  # zero means no drop
+DROP_MULTIPLIER = 0  # zero means no drop
 
 pipeline = sys.argv[1]
 assert pipeline in ["video", "sentiment", "nlp"]
@@ -60,6 +60,9 @@ elif pipeline == "sentiment":
     wl_divider = 2
 else:
     wl_divider = 5
+    
+wl_divider *= 3
+
 wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
 day = 60 * 60 * 24
 workload = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
@@ -163,7 +166,9 @@ print(f"{initial_cpus=}")
 print(f"{initial_batches=}")
 print(f"{initial_replicas=}")
 print(f"{inferline_base_arrival=}")
-
+tp_st1 = initial_replicas[0] * int(1000 * initial_batches[0] / get_latency(initial_cpus[0], initial_batches[0], *pipeline_config["stages"][0]["latency_model"]))
+tp_st2 = initial_replicas[1] * int(1000 * initial_batches[1] / get_latency(initial_cpus[1], initial_batches[1], *pipeline_config["stages"][1]["latency_model"]))
+print(f"{tp_st1=} | {tp_st2=}")
 
 def deploy_dispatchers():
    
@@ -188,6 +193,7 @@ def deploy_dispatchers():
                     "request_cpu": "1",
                     "limit_mem": "1G",
                     "limit_cpu": "1",
+                    "image_pull_policy": "Always",
                     "env_vars": env_vars,
                     "container_ports": [DISPATCHER_PORT],
                 }
@@ -224,8 +230,9 @@ def deploy_adapter(next_target_endpoints: dict):
                     "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
                     "ADAPTER_TYPE": adapter_type,
                     "DECISION_INTERVAL": "1",
+                    "BINARY_THRESHOLD": "0.3",
                     "HORIZONTAL_STABILIZATION": pipeline_config["HORIZONTAL_STABILIZATION"],
-                    "VERTICAL_SCALE_DOWN": "true",
+                    "VERTICAL_SCALE_DOWN": "false",
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "PYTHONUNBUFFERED": "1",
                     "LATENCY_MODEL_MULTIPLIER": str(LATENCY_MODEL_MULTIPLIER),
@@ -270,6 +277,7 @@ def initialize_adapter(adapter_ip, prometheus_endpoint, dispatcher_endpoints):
             "dispatcher_endpoints": dispatcher_endpoints,
             "initial_pod_cpus": {i: initial_cpus[i] for i in range(num_stages)},
             "initial_replicas": {i: initial_replicas[i] for i in range(num_stages)},
+            "batch_timeout": {i: 50 for i in range(num_stages)},
             "initial_batches": {i: initial_batches[i] for i in range(num_stages)},
             "inferline_base_arrival": inferline_base_arrival,
         }),
@@ -477,7 +485,7 @@ if __name__ == "__main__":
             # print(str(datetime.now()), sent_data_id, response)
 
     exporter = subprocess.Popen(["python", f"pipelines/exporter-{pipeline}.py", str(SLO / 1000)])
-    time.sleep(FIRST_DECIDE_DELAY_MINUTES * 60)
+    time.sleep(FIRST_DECIDE_DELAY_MINUTES * 20)
     event = Event()
     query_task = Thread(target=query_metrics, args=(prometheus_endpoint, event))
     query_task.start()
@@ -490,6 +498,7 @@ if __name__ == "__main__":
     event.set()
     query_task.join()
     requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": adapter_type}))
+    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./adapter_logs_{str(datetime.utcnow().timestamp())}.log")
     os.system(f"microk8s kubectl delete ns {namespace}")
     os.system(f"docker stop {prometheus_container_name}")
     time.sleep(1)

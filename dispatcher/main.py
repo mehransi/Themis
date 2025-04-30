@@ -20,6 +20,7 @@ class Dispatcher:
         self.sessions = {}
         self.backend_names = []
         self.batch_size = None
+        self.batch_timeout = None
         self.queue = asyncio.Queue()  # might consider PriorityQueue for EDF
         self.logger = logging.getLogger()
         logging.basicConfig(level = logging.INFO)
@@ -30,6 +31,7 @@ class Dispatcher:
         self.dispatcher_name = data["dispatcher_name"]
         self.backend_port = int(data["backends_port"])
         self.batch_size = data["batch_size"]
+        self.batch_timout = data["batch_timeout"]
         for backend in data["backends"]:
             self.sessions[backend["name"]] = ClientSession(
                 base_url=f"http://{backend['ip']}:{self.backend_port}",
@@ -88,8 +90,15 @@ class Dispatcher:
         while True:
             await asyncio.sleep(0.001)
             batch = []
+            t = time.perf_counter()
             while len(batch) < self.batch_size:
-                qd = await self.queue.get()
+                try:
+                    qd = await self.queue.get()
+                except asyncio.QueueEmpty:
+                    await asyncio.sleep(0.001)
+                    if 1000 * (time.perf_counter() - t) > self.batch_timeout:
+                        break
+                    continue
                 if self.drop_after:
                     if 1000 * (time.time() - qd[f"arrival-stage-0"]) >= self.drop_after:
                         self.total_dropped += 1
