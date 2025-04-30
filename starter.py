@@ -28,7 +28,7 @@ from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
 
-LATENCY_MODEL_MULTIPLIER = 1
+LATENCY_MODEL_MULTIPLIER = 1.1
 LATENCY_MODEL_BATCH_MULTIPLIER = 1
 
 

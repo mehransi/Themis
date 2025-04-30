@@ -102,6 +102,7 @@ class Adapter:
         current_throughput = get_throughput(self.current_state, self.latency_models)
         
         should_apply_horizontal = not await self.is_wl_increasing_next_10(current_throughput)
+        should_apply_horizontal = should_apply_horizontal and (current_rps < current_throughput)
         self.logger.info(
             f"datetime={str(datetime.now())}, {current_rps=}, {current_throughput=}, stabilization_counter={self.horizontal_stabilization_counter}, {should_apply_horizontal=}", 
         )
