@@ -31,7 +31,7 @@ class Dispatcher:
         self.dispatcher_name = data["dispatcher_name"]
         self.backend_port = int(data["backends_port"])
         self.batch_size = data["batch_size"]
-        self.batch_timout = data["batch_timeout"]
+        self.batch_timeout = data["batch_timeout"]
         for backend in data["backends"]:
             self.sessions[backend["name"]] = ClientSession(
                 base_url=f"http://{backend['ip']}:{self.backend_port}",
@@ -92,12 +92,14 @@ class Dispatcher:
         while True:
             await asyncio.sleep(0.001)
             batch = []
-            t = time.perf_counter()
+            t = None
             while len(batch) < self.batch_size:
                 try:
-                    qd = await self.queue.get()
+                    qd = self.queue.get_nowait()
                 except asyncio.QueueEmpty:
                     await asyncio.sleep(0.001)
+                    if t is None:
+                        continue
                     if 1000 * (time.perf_counter() - t) > self.batch_timeout:
                         break
                     continue
@@ -107,7 +109,8 @@ class Dispatcher:
                         continue
                 
                 batch.append(qd)
-            
+                if len(batch) == 1:
+                    t = time.perf_counter()
             tt = time.perf_counter()
             backend_name = await self.select_backend_to_dispatch()
             self.logger.info(f'datetime={str(datetime.now())}, backend_selection_took={time.perf_counter() - tt:.3f}, id={batch[0]["id"]}, total_dropped={self.total_dropped}, now-first_batch_arrival={1000 * (time.time() - batch[0][f"arrival-{self.dispatcher_name}"]):.3f}')
