@@ -70,7 +70,9 @@ class Dispatcher:
     
     async def receive(self, data: dict):
         self.total_requests += 1
-        await self.queue.put({f"arrival-{self.dispatcher_name}": time.time(), **data})
+        arrival = time.time()
+        self.logger.info(f'datetime={str(datetime.now())}, query_received: id={data["id"]}, sent: {data["sent_at"]}')
+        await self.queue.put({f"arrival-{self.dispatcher_name}": arrival, **data})
         return {"received": True}
    
 
@@ -108,7 +110,7 @@ class Dispatcher:
             
             tt = time.perf_counter()
             backend_name = await self.select_backend_to_dispatch()
-            self.logger.info(f'datetime={str(datetime.now())}, backend_selection_took={time.perf_counter() - tt}, id={batch[0]["id"]}, total_dropped={self.total_dropped}, {1000 * (time.time() - qd[f"arrival-{self.dispatcher_name}"])}')
+            self.logger.info(f'datetime={str(datetime.now())}, backend_selection_took={time.perf_counter() - tt:.3f}, id={batch[0]["id"]}, total_dropped={self.total_dropped}, now-first_batch_arrival={1000 * (time.time() - batch[0][f"arrival-{self.dispatcher_name}"]):.3f}')
             for q in batch:
                 q[f"backend-{self.dispatcher_name}"] = backend_name
                 q[f"leaving-{self.dispatcher_name}"] = time.time()

@@ -290,7 +290,7 @@ def _get_value(prom_res, divide_by=1, should_round=True):
             if tup[1] != "NaN":
                 v = float(tup[1]) / divide_by
                 if should_round:
-                    return round(v, 2)
+                    return round(v, 3)
                 return v
         
 
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     if pipeline == "video":
         im = cv2.imread(f"./zidane.jpg")
         im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
-        encoded = base64.b64encode(cv2.imencode(".jpg",im)[1].tobytes()).decode("utf-8")
+        encoded = base64.b64encode(cv2.imencode(".jpeg",im)[1].tobytes()).decode("utf-8")
     elif pipeline == "sentiment":
         encoded = base64.b64encode(open('./audio.flac', 'rb').read()).decode("utf-8")
     else:
@@ -478,14 +478,14 @@ if __name__ == "__main__":
         def get_request_data(self):
             global counter
             counter.value += 1
-            return counter.value, json.dumps({"data": encoded, "id": counter.value})
+            return counter.value, json.dumps({"data": encoded, "id": counter.value, "sent_at": str(datetime.now())})
 
         def process_response(self, sent_data_id: str, response: json):
             pass
             # print(str(datetime.now()), sent_data_id, response)
 
     exporter = subprocess.Popen(["python", f"pipelines/exporter-{pipeline}.py", str(SLO / 1000)])
-    time.sleep(FIRST_DECIDE_DELAY_MINUTES * 20)
+    time.sleep(FIRST_DECIDE_DELAY_MINUTES * 10)
     event = Event()
     query_task = Thread(target=query_metrics, args=(prometheus_endpoint, event))
     query_task.start()
