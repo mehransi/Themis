@@ -56,25 +56,34 @@ class ModelServer:
         for query in req:
             data = query["data"]
             query[f"arrival-{self.__class__.__name__}"] = arrival_time
+            t = time.perf_counter()
             inp = self.preprocess(data)
+            query[f"{self.__class__.__name__}-prep-time"] = round(time.perf_counter() - t, 3)
             batch.append(inp)
             c += 1
 
+        t = time.perf_counter()
         batch = self.batch_preprocess(batch)
+        batch_prep_time = round(time.perf_counter() - t, 3)
         t = time.perf_counter()
         preds = self.inference(batch)
+        infer_time = round(time.perf_counter() - t, 3)
+        t = time.perf_counter()
         preds = self.convert_batch_result(preds)
-        t = time.perf_counter() - t
+        convert_batch_time = round(time.perf_counter() - t, 3)
+        
         
         tasks = []
         for i in range(c):
             to_send = req[i]
             to_send["data"] = self.get_next_target_data(preds[i])
-            to_send[f"{self.__class__.__name__}-batch-inference-time-{c}"] = t
+            to_send[f"{self.__class__.__name__}-batch-prep-time-{c}"] = batch_prep_time
+            to_send[f"{self.__class__.__name__}-batch-inference-time-{c}"] = infer_time
+            to_send[f"{self.__class__.__name__}-batch-convert-time-{c}"] = convert_batch_time
             to_send[f"leaving-{self.__class__.__name__}"] = time.time()
 
             tasks.append(asyncio.create_task(self.send(to_send)))
-        return {"received": True}
+        return {"received": True, "node": os.uname()[1]}
     
     async def send(self, data):
         async with self.session.post(self.url_path, data=json.dumps(data)) as response:
@@ -95,9 +104,21 @@ def add_base_routes(app: web.Application, model_server: ModelServer):
 
     async def update_threads(request):
         req = await request.json()
+        t = time.perf_counter()
         torch.set_num_threads(int(req["threads"]))
-        print("Torch updating threads:", req["threads"], torch.get_num_threads())
-        return web.json_response({"success": True})
+        torch_thread_update_took = round(time.perf_counter() - t, 3)
+        t = time.perf_counter()
+        if os.getenv("WARMUP_AFTER_THREAD_UPDATE", "false").lower() == "true" and int(req["threads"] > 1):
+            model_server.warmup()
+        warmup_time = round(time.perf_counter() - t, 3)
+        print(
+            "Torch updating threads:",
+            req["threads"], torch.get_num_threads(),
+            "torch_update_took", torch_thread_update_took,
+            "warmup_took", warmup_time
+        )
+
+        return web.json_response({"success": True, "torch_update_took": torch_thread_update_took, "warmup_took": warmup_time})
 
     async def infer(request):
         req = await request.json()
