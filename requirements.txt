@@ -1,4 +1,4 @@
 opencv-python==4.9.0.80
 prometheus-client==0.13.1
-kubernetes-python-client @ git+https://github.com/reconfigurable-ml-pipeline/kubernetes-python-client.git@d345331e61ff094a3c285961ecb67827f9045d5f
+kubernetes-python-client @ git+https://github.com/reconfigurable-ml-pipeline/kubernetes-python-client.git
 barazmoon @ git+https://github.com/reconfigurable-ml-pipeline/load_tester

@@ -41,6 +41,7 @@ def deploy_classifier(next_target_endpoint, i):
                 "request_cpu": "1",
                 "limit_mem": "1G",
                 "limit_cpu": "1",
+                "image_pull_policy": "Always",
                 "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1",},
                 "container_ports": [PORT],
             }
@@ -108,14 +109,14 @@ if __name__ == "__main__":
                 namespace=namespace,
             )
             response = requests.post(f"http://{pod_ips[r]}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
-            assert json.loads(response.text) == {"success": True}
+            assert json.loads(response.text).get("success") == True
         time.sleep(0.2)
         for batch in range(1, 5):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})
             repeat = 0
-            while repeat < 128 * 8 // batch + 2 * batch:
+            while repeat < 256 * 8 // batch + 2 * batch:
                 data = json.dumps(batch_input)
                 for r in range(replicas):
                     repeat += 1

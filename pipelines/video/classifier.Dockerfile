@@ -12,4 +12,4 @@ COPY model_server.py model_server.py
 COPY classifier.py classifier.py
 COPY zidane.jpg zidane.jpg
 
-ENTRYPOINT ["python", "classifier.py"]
+ENTRYPOINT ["taskset", "-c", "0-7", "python", "classifier.py"]

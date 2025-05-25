@@ -12,7 +12,7 @@ history_seconds = 60
 next_prediction_period = 10
 input_shape = history_seconds // next_prediction_period
 
-BINARY_THRESHOLD = 0.5
+BINARY_THRESHOLD = 0.2
 
 dir = os.path.dirname(__file__)
 
@@ -135,22 +135,26 @@ def my_test():
     # plt.show()
     tp = 0
     fn = 0
+    fp = 0
     for i in range(len(test_y)):
         y = test_y[i]
         pred = y_pred_classes[i]
         if y == pred == 1:
             tp += 1
+        if y == 0 and pred == 1:
+            fp += 1
         if y == 1 and pred == 0:
             fn += 1
         
+    print("precision", (tp / (tp + fp)))
     print("recall", (tp / (tp + fn)))
 
 
 if __name__ == "__main__":
     # my_train()
-    # my_test()
-    model = saving.load_model(f'{dir}/lstm_binary.keras')
-    h = tf.convert_to_tensor(np.array([34, 31, 22, 29, 32, 31]).reshape((-1, 6, 1)), dtype=tf.float32)
-    preds = model.predict([h, tf.convert_to_tensor([50])])
-    y_pred_classes = (preds >= BINARY_THRESHOLD).astype(int)
-    print(bool(y_pred_classes))
+    my_test()
+    # model = saving.load_model(f'{dir}/lstm_binary.keras')
+    # h = tf.convert_to_tensor(np.array([34, 31, 22, 29, 32, 31]).reshape((-1, 6, 1)), dtype=tf.float32)
+    # preds = model.predict([h, tf.convert_to_tensor([50])])
+    # y_pred_classes = (preds >= BINARY_THRESHOLD).astype(int)
+    # print(bool(y_pred_classes))

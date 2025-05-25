@@ -30,6 +30,7 @@ from utils import wait_till_pod_is_ready
 
 LATENCY_MODEL_MULTIPLIER = 1.1
 LATENCY_MODEL_BATCH_MULTIPLIER = 1
+BINARY_THRESHOLD = 0.2  # Threshold for LSTM binary classification
 
 
 def get_latency(core, batch, alpha, beta, gamma, zeta):
@@ -152,7 +153,7 @@ else:
         initial_replicas = best["replica"]
 
 
-drop_after = SLO * DROP_MULTIPLIER
+drop_after = int(SLO * DROP_MULTIPLIER)
 
 ADAPTER_DEPLOY_NAME = "pelastic-adapter"
 
@@ -230,7 +231,7 @@ def deploy_adapter(next_target_endpoints: dict):
                     "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
                     "ADAPTER_TYPE": adapter_type,
                     "DECISION_INTERVAL": "1",
-                    "BINARY_THRESHOLD": "0.3",
+                    "BINARY_THRESHOLD": str(BINARY_THRESHOLD),
                     "HORIZONTAL_STABILIZATION": pipeline_config["HORIZONTAL_STABILIZATION"],
                     "VERTICAL_SCALE_DOWN": "false",
                     "K8S_IN_CLUSTER_CLIENT": "true",
@@ -391,7 +392,7 @@ def query_metrics(prom_endpoint, event: Event):
             "cost_stage1": _get_value(await cost_stage1),
             "rate": _get_value(await rate),
             "total_requests": _get_value(await total_requests),
-            "within_slo": _get_value(await within_slo, should_round=False),
+            "within_slo": _get_value(await within_slo),
             "drop_rate": _get_value(await drop_rate),
             "drop_total_stage0": _get_value(await drop_total_stage0),
             "drop_total_stage1": _get_value(await drop_total_stage1),
@@ -497,8 +498,11 @@ if __name__ == "__main__":
     print("Load tester finished", count, success)
     event.set()
     query_task.join()
+    utcnow = str(datetime.utcnow().timestamp())
     requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": adapter_type}))
-    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./adapter_logs_{str(datetime.utcnow().timestamp())}.log")
+    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./adapter_logs_{utcnow}.log")
+    for i in range(len(pipeline_config['stages'])):
+        os.system(f"microk8s kubectl logs -n {namespace} deployment/{pipeline_config['stages'][i]['stage_name']}-dispatcher > ./stage{i}_dispatcher_logs_{utcnow}.log")
     os.system(f"microk8s kubectl delete ns {namespace}")
     os.system(f"docker stop {prometheus_container_name}")
     time.sleep(1)

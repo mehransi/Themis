@@ -11,11 +11,16 @@ def latency(core, batch, alpha, beta, gamma, zeta):
 
 
 def get_throughput(state: dict, models: dict):
-    b = state[0][2]
-    replicas = state[0][1]
-    cores = state[0][0]
-    current_latency = latency(cores, b, *models[0])        
-    return replicas * int(1000 * b / current_latency)
+    current_tp = 10000
+    for s in range(len(state)):
+        b = state[s][2]
+        replicas = state[s][1]
+        cores = state[s][0]
+        current_latency = latency(cores, b, *models[s])
+        tp = replicas * int(1000 * b / current_latency)
+        if tp < current_tp:
+            current_tp = tp
+    return current_tp
 
 
 def horizontal_2d(b_max, slo, models, workload):

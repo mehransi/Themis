@@ -27,5 +27,6 @@ if __name__ == "__main__":
     logger.info(f"Adapter type is {adapter_type}")
     while True:
         thread = Thread(target=signal)
-        thread.run()
+        thread.start()
         time.sleep(decision_interval)
+        thread.join()

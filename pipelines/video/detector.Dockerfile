@@ -16,4 +16,4 @@ COPY detector.py detector.py
 COPY zidane.jpg zidane.jpg
 COPY ultralytics_yolov5_master ultralytics_yolov5_master
 
-ENTRYPOINT ["python", "detector.py"]
+ENTRYPOINT ["taskset", "-c", "0-7", "python", "detector.py"]
