@@ -119,13 +119,13 @@ class Adapter:
         if should_apply_horizontal is False:
             update_tasks = []
             create_tasks = []
-            before_vertical_time = time.perf_counter()
             
             t_dp = time.perf_counter()
             new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
             self.logger.info(
-                f"datetime={str(datetime.now())}, vertical_2d_took={time.perf_counter() - t_dp:.3f}, {current_rps=}"
+                f"datetime={str(datetime.now())}, vertical_2d_took={time.perf_counter() - t_dp:.4f}, {current_rps=}"
             )
+            before_vertical_apply_time = time.perf_counter()
             new_state = {}
             for i in range(len(new_vertical_config)):
                 if os.getenv("VERTICAL_SCALE_DOWN", "false").lower() == "true":
@@ -150,13 +150,13 @@ class Adapter:
             t_ = time.perf_counter()
             await asyncio.gather(*create_tasks)
             self.logger.info(
-                f"datetime={str(datetime.now())}, vertical_config={json.dumps(new_vertical_config)}, more_instances={more_instances} vertical_2d_took={time.perf_counter() - before_vertical_time:.3f}, updating_pods_took={update_in_vertical_took:.3f}, creating_pods_took={time.perf_counter() - t_:.3f}"
+                f"datetime={str(datetime.now())}, vertical_config={json.dumps(new_vertical_config)}, more_instances={more_instances} vertical_crud_took={time.perf_counter() - before_vertical_apply_time:.3f}, updating_pods_took={update_in_vertical_took:.3f}, creating_pods_took={time.perf_counter() - t_:.3f}"
             )
         else:
             t_dp = time.perf_counter()            
             new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
             self.logger.info(
-                f"datetime={str(datetime.now())}, horizontal_2d_took={time.perf_counter() - t_dp:.3f}, {current_rps=}"
+                f"datetime={str(datetime.now())}, horizontal_2d_took={time.perf_counter() - t_dp:.4f}, {current_rps=}"
             )
             tasks = []
             new_state = {}
