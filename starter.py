@@ -9,6 +9,7 @@ import math
 import os
 import sys
 import time
+import itertools
 
 from barazmoon import BarAzmoon
 from datetime import datetime
@@ -28,7 +29,7 @@ from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
 
-LATENCY_MODEL_MULTIPLIER = 1.1
+LATENCY_MODEL_MULTIPLIER = 1.2
 LATENCY_MODEL_BATCH_MULTIPLIER = 1
 BINARY_THRESHOLD = 0.2  # Threshold for LSTM binary classification
 
@@ -43,12 +44,12 @@ FIRST_DECIDE_DELAY_MINUTES = 1
 
 MAX_CPU_CORES = 4
 
-DROP_MULTIPLIER = 0  # zero means no drop
+DROP_MULTIPLIER = 1  # zero means no drop
 
 pipeline = sys.argv[1]
 assert pipeline in ["video", "sentiment", "nlp"]
 adapter_type = sys.argv[2]
-assert adapter_type in ["hv", "ho", "vo", "vomax", "il"], "Adapter type must be one of {hv, ho, vo, vomax, il}"
+assert adapter_type in ["hv", "ho", "vo", "il"], "Adapter type must be one of {hv, ho, vo, il}"
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
@@ -62,7 +63,7 @@ elif pipeline == "sentiment":
 else:
     wl_divider = 5
     
-wl_divider *= 3
+wl_divider *= 1.5
 
 wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
 day = 60 * 60 * 24
@@ -72,27 +73,34 @@ inferline_base_arrival = max(workload[:30])
 SLO = pipeline_config["SLO"]
 num_stages = len(pipeline_config["stages"])
 
-
-if pipeline == "video":
-    initial_replicas = [3, 2]
-elif pipeline == "sentiment":
-    initial_replicas = [4, 2]
-elif pipeline == "nlp":
-    initial_replicas = [1, 3, 3]
+initial_replicas = [1] * num_stages
+initial_batches = [1] * num_stages
+initial_cpus = [1] * num_stages
 
 for stage in range(num_stages):
-    l = get_latency(MAX_CPU_CORES, 1, *pipeline_config["stages"][stage]["latency_model"])
+    l = get_latency(1, 1, *pipeline_config["stages"][stage]["latency_model"])
     tp = 1000 // l
     initial_replicas[stage] = math.ceil(inferline_base_arrival / tp)
 
 if adapter_type == "vo":
-    initial_cpus = [1] * num_stages
-    initial_batches = [1] * num_stages
+    bl = list(range(pipeline_config["MAX_BATCH_SIZE"], 0, -1))
+    permutations = list(itertools.product(*[bl for _ in range(num_stages)]))
+    batch_config = None
+    for bc in permutations:
+        e2e = 0
+        for stage in range(num_stages):
+            e2e += get_latency(MAX_CPU_CORES, bc[stage], *pipeline_config["stages"][stage]["latency_model"])
+            e2e += int((bc[stage] - 1) * 1000 / max(workload))
+        if e2e <= pipeline_config["SLO"]:
+            batch_config = list(bc)
+            break
     for stage in range(num_stages):
-        l = get_latency(MAX_CPU_CORES, 1, *pipeline_config["stages"][stage]["latency_model"])
-        tp = 1000 // l
+        l = get_latency(MAX_CPU_CORES, batch_config[stage], *pipeline_config["stages"][stage]["latency_model"])
+        tp = batch_config[stage] * 1000 // l
         initial_replicas[stage] = math.ceil(max(workload) / tp)
-else:
+
+
+elif adapter_type == "il":
     def get_cost(cpu_list, replica_list):
         c = 0
         for i in range(len(replica_list)):
@@ -112,7 +120,6 @@ else:
         return True
     
     initial_cpus = [MAX_CPU_CORES] * num_stages
-    initial_batches = [1] * num_stages
     actions = ["IB", "RR", "DH"]
     while True:
         best = None
@@ -406,7 +413,7 @@ def query_metrics(prom_endpoint, event: Event):
             break
         time.sleep(GET_METRICS_INTERVAL)
         metrics = asyncio.run(get_metrics(prom))
-        filepath = f"./series-{pipeline}-{adapter_type}-{SLO}-{drop_after}-batch{pipeline_config['MAX_BATCH_SIZE']}.csv"
+        filepath = f"./{pipeline}_{adapter_type}_{SLO}_{drop_after}_batch{pipeline_config['MAX_BATCH_SIZE']}_series.csv"
         file_exists = os.path.exists(filepath)
         with open(filepath, "a") as f:
             field_names = [
@@ -499,10 +506,10 @@ if __name__ == "__main__":
     event.set()
     query_task.join()
     utcnow = str(datetime.utcnow().timestamp())
-    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": adapter_type}))
-    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./adapter_logs_{utcnow}.log")
+    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": f"{adapter_type}_{SLO}_{drop_after}"}))
+    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./{pipeline}_{adapter_type}_adapter_logs_{utcnow}.log")
     for i in range(len(pipeline_config['stages'])):
-        os.system(f"microk8s kubectl logs -n {namespace} deployment/{pipeline_config['stages'][i]['stage_name']}-dispatcher > ./stage{i}_dispatcher_logs_{utcnow}.log")
+        os.system(f"microk8s kubectl logs -n {namespace} deployment/{pipeline_config['stages'][i]['stage_name']}-dispatcher > ./{pipeline}_{adapter_type}_stage{i}_dispatcher_logs_{utcnow}.log")
     os.system(f"microk8s kubectl delete ns {namespace}")
     os.system(f"docker stop {prometheus_container_name}")
     time.sleep(1)

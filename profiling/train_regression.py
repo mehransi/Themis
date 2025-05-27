@@ -16,8 +16,8 @@ with open(f"{os.path.dirname(__file__)}/models/{model}/profiling-{PERCENTILE}.js
     profiling_data = json.load(f)
 
 
-training_data = list(filter(lambda x: x["cpu"] in [1, 2, 4, 8], profiling_data))
-training_data = list(filter(lambda x: x["batch"] in [1, 2, 4, 8], training_data))
+training_data = list(filter(lambda x: x["cpu"] in [1, 2, 4, 6], profiling_data))
+training_data = list(filter(lambda x: x["batch"] in [1, 2, 4, 6], training_data))
 print("len profiling_data", len(profiling_data))
 cpu_sizes = list(map(lambda x: x["cpu"], training_data))
 batch_sizes = list(map(lambda x: x["batch"], training_data))

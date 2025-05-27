@@ -7,7 +7,7 @@ TOTAL_CORE = 32
 def latency(core, batch, alpha, beta, gamma, zeta):
     mlt = float(os.getenv("LATENCY_MODEL_MULTIPLIER", "1"))
     mltb = float(os.getenv("LATENCY_MODEL_BATCH_MULTIPLIER", "1"))
-    return int(mlt * (alpha * batch / core + mltb * (beta * batch) + gamma / core + zeta))
+    return round(mlt * (alpha * batch / core + mltb * (beta * batch) + gamma / core + zeta))
 
 
 def get_throughput(state: dict, models: dict):
@@ -171,8 +171,8 @@ if __name__ == "__main__":
     batch_max = 8
     core_max = 8
     slo_max = 1000
-    models_set = {0: [84.77978914419758, 21.867603656295096, 0.3475406625080165, -3.3934556468994534],
-                  1: [61.4976951513907, 3.815267577294629, 14.901415567121793, 11.041543118691706]}
+    models_set = {0: [57.32741659398668, 9.37504313557346, -0.21007541590491052, -3.6728699710845127],
+                1: [29.94419228390404, 1.6093922724909369, 0.21087515241287602, 2.4765776086144875]}
 
     current_workload = 30
     config_current = {0: [1, 1, 1], 1: [1, 1, 1]}
