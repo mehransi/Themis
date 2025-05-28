@@ -11,7 +11,7 @@ def batch_cost_latency_model(cpu_batch_tuple, alpha, beta, gamma, zeta):
 x_data = [1, 2, 4, 6]
 batches = [1, 2, 4, 6]
 color_by_batch = {1: "#5e3c99", 2: "#b2abd2", 4: "#fdb863", 8: "#e66101"}
-percentile = 98
+percentile = int(sys.argv[1])
 
 with open(f"{os.path.dirname(__file__)}/models/detector/parameters-{percentile}.json") as f:
     detector_parameters = json.load(f)

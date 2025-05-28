@@ -97,7 +97,7 @@ async def receive(request):
 filepath = os.path.dirname(os.path.dirname(__file__))
 async def save_to_file(request):
     data = await request.json()
-    with open(f"{filepath}/nlp-{data['adapter']}.json", "w") as f:
+    with open(f"{filepath}/nlp_{data['adapter']}.json", "w") as f:
         json.dump(exporter.per_request_list, f, indent=2)
     return web.json_response({"saved": True})
         

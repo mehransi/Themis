@@ -94,7 +94,7 @@ if __name__ == "__main__":
             f"http://{pod_ips[r]}:{PORT}/infer", data=json.dumps([{"data": input_data}])
         )
     
-    for cpu in range(1, 9):
+    for cpu in range(1, 7):
         for r in range(replicas):
             update_pod(
                 POD_NAME + f"-{r}",
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             for _ in range(batch):
                 batch_input.append({"data": input_data})
             repeat = 0
-            while repeat < 256 * 8 // batch + 2 * batch:
+            while repeat < 256 * 8 + 2 * batch:
                 data = json.dumps(batch_input)
                 for r in range(replicas):
                     repeat += 1
