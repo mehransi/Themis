@@ -21,14 +21,14 @@ EXPORTER_PORT = 8082
 SOURCE_NAME = "Detector"
 IMAGE_NAME = "mehransi/main:pelastic-video-detector"
 
-
+directory = os.path.dirname(__file__)
 def get_data():
-    im = cv2.imread(f"{sys.argv[1]}")
-    im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
+    im = cv2.imread(f"{directory}/zidane.jpg")
+    im = cv2.resize(im, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_LINEAR)
     return base64.b64encode(cv2.imencode(".jpeg",im)[1].tobytes()).decode("utf-8")
 
 
-def deploy_classifier(next_target_endpoint, i):
+def deploy_detector(next_target_endpoint, i):
     create_pod(
         POD_NAME + f"-{i}",
         [
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     pod_ips = []
     input_data = get_data()
     for r in range(replicas):
-        pod_ips.append(deploy_classifier(f"{EXPORTER_IP}:{EXPORTER_PORT}", r))
+        pod_ips.append(deploy_detector(f"{EXPORTER_IP}:{EXPORTER_PORT}", r))
         requests.post(
             f"http://{pod_ips[r]}:{PORT}/infer", data=json.dumps([{"data": input_data}])
         )

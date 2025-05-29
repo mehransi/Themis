@@ -53,7 +53,7 @@ class Exporter:
         classifier_histogram.observe(data["classifier-e2e"])
         e2e_histogram.observe(data["e2e"])
         
-        per_request = {}
+        per_request = {"data": data["data"]}
         for k in ["dispatcher-stage0", "detector-e2e", "dispatcher-stage1", "classifier-e2e", "e2e"]:
             per_request[k] = data[k]
         per_request["timestamp"] = str(datetime.now())

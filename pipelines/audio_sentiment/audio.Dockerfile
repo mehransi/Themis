@@ -19,4 +19,4 @@ COPY model_server.py model_server.py
 COPY audio_to_text.py audio_to_text.py
 
 
-ENTRYPOINT ["python", "audio_to_text.py"]
+ENTRYPOINT ["taskset", "-c", "0-7", "python", "audio_to_text.py"]

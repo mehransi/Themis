@@ -35,6 +35,7 @@ def deploy_sentiment(next_target_endpoint, i):
                 "request_cpu": "1",
                 "limit_mem": "2G",
                 "limit_cpu": "1",
+                "image_pull_policy": "Always",
                 "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1",},
                 "container_ports": [PORT],
             }
@@ -87,7 +88,7 @@ if __name__ == "__main__":
             f"http://{pod_ips[r]}:{PORT}/infer", data=json.dumps([{"data": input_data}])
         )
     
-    for cpu in range(1, 9):
+    for cpu in range(1, 7):
         for r in range(replicas):
             update_pod(
                 POD_NAME + f"-{r}",
@@ -102,14 +103,14 @@ if __name__ == "__main__":
                 namespace=namespace,
             )
             response = requests.post(f"http://{pod_ips[r]}:{PORT}/update-threads", data=json.dumps({"threads": cpu}))
-            assert json.loads(response.text) == {"success": True}
+            assert json.loads(response.text).get("success") == True
         time.sleep(0.2)
         for batch in range(1, 5):
             batch_input = []
             for _ in range(batch):
                 batch_input.append({"data": input_data})
             repeat = 0
-            while repeat < 128 * 8 // batch + 2 * batch:
+            while repeat < 128 * 8 + 2 * batch:
                 data = json.dumps(batch_input)
                 for r in range(replicas):
                     repeat += 1

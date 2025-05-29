@@ -13,4 +13,4 @@ COPY model_server.py model_server.py
 COPY translation.py translation.py
 
 
-ENTRYPOINT ["python", "translation.py"]
+ENTRYPOINT ["taskset", "-c", "0-7", "python", "translation.py"]

@@ -14,4 +14,4 @@ COPY model_server.py model_server.py
 COPY sentiment_analysis.py sentiment_analysis.py
 
 
-ENTRYPOINT ["python", "sentiment_analysis.py"]
+ENTRYPOINT ["taskset", "-c", "0-7", "python", "sentiment_analysis.py"]

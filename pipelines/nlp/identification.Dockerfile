@@ -12,4 +12,4 @@ COPY model_server.py model_server.py
 COPY language_identification.py language_identification.py
 
 
-ENTRYPOINT ["python", "language_identification.py"]
+ENTRYPOINT ["taskset", "-c", "0-7", "python", "language_identification.py"]
