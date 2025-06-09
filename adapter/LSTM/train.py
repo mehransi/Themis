@@ -12,7 +12,7 @@ history_seconds = 60
 next_prediction_period = 10
 input_shape = history_seconds // next_prediction_period
 
-BINARY_THRESHOLD = 0.2
+BINARY_THRESHOLD = 0.4
 
 dir = os.path.dirname(__file__)
 

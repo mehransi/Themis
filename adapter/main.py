@@ -103,11 +103,25 @@ class Adapter:
         
         should_apply_horizontal = not await self.is_wl_increasing_next_10(current_throughput)
         should_apply_horizontal = should_apply_horizontal and (current_rps < current_throughput)
+        
+        no_room_for_vertical = False
+        for i in range(len(self.current_state)):
+            if self.current_state[i][0] == self.max_cores:
+                no_room_for_vertical = True
+                break
+        
+        should_apply_horizontal = should_apply_horizontal or no_room_for_vertical
+            
         self.logger.info(
             f"datetime={str(datetime.now())}, {current_rps=}, {current_throughput=}, stabilization_counter={self.horizontal_stabilization_counter}, {should_apply_horizontal=}", 
         )
         if should_apply_horizontal:
-            if self.horizontal_stabilization_counter < self.horizontal_stabilization:
+            new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
+            scaling_in = True
+            for i in range(len(new_horizontal_config)):
+                if new_horizontal_config[i][0] > self.current_state[i][1]:
+                    scaling_in = False
+            if scaling_in and self.horizontal_stabilization_counter < self.horizontal_stabilization:
                 self.horizontal_stabilization_counter += 1
                 return
             
@@ -154,7 +168,6 @@ class Adapter:
             )
         else:
             t_dp = time.perf_counter()            
-            new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
             self.logger.info(
                 f"datetime={str(datetime.now())}, horizontal_2d_took={time.perf_counter() - t_dp:.4f}, {current_rps=}"
             )
@@ -162,6 +175,10 @@ class Adapter:
             new_state = {}
             before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
+                if self.current_state[i][0] > 1:
+                    # Add one more instance for stablity
+                    new_horizontal_config[i][0] += 1
+                    
                 new_state[i] = [1, new_horizontal_config[i][0], new_horizontal_config[i][1]]
                 if new_state[i] == self.current_state[i]:
                     continue
@@ -391,7 +408,8 @@ class Adapter:
         ) as response:
             response = await response.json()
             self.logger.info(f"datetime={str(datetime.now())}, get_current_rps_took: {time.perf_counter() - t:.3f}")
-            return int(float(response["data"]["result"][0]["value"][1]))
+            rps = float(response["data"]["result"][0]["value"][1])
+            return round(rps + rps ** 0.5)
     
     async def is_wl_increasing_next_10(self, target: int):
         t = time.perf_counter()
