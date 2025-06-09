@@ -152,5 +152,8 @@ tests/
 workload.txt
 series*.csv
 zidane.jpg
+ancelotti.jpg
 audio.flac
+*.pdf 
+*.zip
 *.log

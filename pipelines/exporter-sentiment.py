@@ -54,7 +54,7 @@ class Exporter:
         sentiment_histogram.observe(data["sentiment-e2e"])
         e2e_histogram.observe(data["e2e"])
         
-        per_request = {}
+        per_request = {"data": data["data"]}
         for k in ["dispatcher-stage0", "audio-e2e", "dispatcher-stage1", "sentiment-e2e", "e2e"]:
             per_request[k] = data[k]
         per_request["timestamp"] = str(datetime.now())

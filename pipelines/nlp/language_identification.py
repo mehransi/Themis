@@ -12,7 +12,7 @@ class LanguageIdentification(ModelServer):
         return model
     
     def warmup(self):
-        text = "Intégration des échelles horizontale et verticale pour l'inférence Servir les systèmes"
+        text = "こんにちは。私はAIです。"
         self.model([text])
         
     def inference(self, batch):

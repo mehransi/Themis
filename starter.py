@@ -29,27 +29,30 @@ from kube_resources.services import create_service, get_service
 
 from utils import wait_till_pod_is_ready
 
-LATENCY_MODEL_MULTIPLIER = 1.2
-LATENCY_MODEL_BATCH_MULTIPLIER = 1
-BINARY_THRESHOLD = 0.2  # Threshold for LSTM binary classification
+pipeline = sys.argv[1]
+assert pipeline in ["video", "sentiment", "nlp"]
+adapter_type = sys.argv[2]
+assert adapter_type in ["hv", "ho", "vo", "il"], "Adapter type must be one of {hv, ho, vo, il}"
+
+MULTIPLIER_BY_PIPELINE = {"video": 1.15, "sentiment": 1.1, "nlp": 1}
+BATCH_MULTIPLIER_BY_PIPELINE = {"video": 1, "sentiment": 1.1, "nlp": 1}
+LATENCY_MODEL_MULTIPLIER = MULTIPLIER_BY_PIPELINE[pipeline]
+LATENCY_MODEL_BATCH_MULTIPLIER = BATCH_MULTIPLIER_BY_PIPELINE[pipeline]
+BINARY_THRESHOLD = 0.4  # Threshold for LSTM binary classification
 
 
 def get_latency(core, batch, alpha, beta, gamma, zeta):
-    return int(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + zeta))
+    return round(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + zeta))
 
 
 namespace = "mehran"
 GET_METRICS_INTERVAL = 1
-FIRST_DECIDE_DELAY_MINUTES = 1
+FIRST_DECIDE_DELAY_MINUTES = 0.5
 
 MAX_CPU_CORES = 4
 
 DROP_MULTIPLIER = 1  # zero means no drop
 
-pipeline = sys.argv[1]
-assert pipeline in ["video", "sentiment", "nlp"]
-adapter_type = sys.argv[2]
-assert adapter_type in ["hv", "ho", "vo", "il"], "Adapter type must be one of {hv, ho, vo, il}"
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
@@ -59,9 +62,9 @@ with open("workload.txt") as f:
 if pipeline == "video":
     wl_divider = 1
 elif pipeline == "sentiment":
-    wl_divider = 2
+    wl_divider = 1.7
 else:
-    wl_divider = 5
+    wl_divider = 2.3
     
 wl_divider *= 1.5
 
@@ -77,12 +80,13 @@ initial_replicas = [1] * num_stages
 initial_batches = [1] * num_stages
 initial_cpus = [1] * num_stages
 
-for stage in range(num_stages):
-    l = get_latency(1, 1, *pipeline_config["stages"][stage]["latency_model"])
-    tp = 1000 // l
-    initial_replicas[stage] = math.ceil(inferline_base_arrival / tp)
 
-if adapter_type == "vo":
+if adapter_type in ["ho", "hv"]:
+    for stage in range(num_stages):
+        l = get_latency(1, 1, *pipeline_config["stages"][stage]["latency_model"])
+        tp = 1000 // l
+        initial_replicas[stage] = math.ceil(inferline_base_arrival / tp)
+elif adapter_type == "vo":
     bl = list(range(pipeline_config["MAX_BATCH_SIZE"], 0, -1))
     permutations = list(itertools.product(*[bl for _ in range(num_stages)]))
     batch_config = None
@@ -97,10 +101,15 @@ if adapter_type == "vo":
     for stage in range(num_stages):
         l = get_latency(MAX_CPU_CORES, batch_config[stage], *pipeline_config["stages"][stage]["latency_model"])
         tp = batch_config[stage] * 1000 // l
-        initial_replicas[stage] = math.ceil(max(workload) / tp)
-
-
-elif adapter_type == "il":
+        mx_wl = max(workload)
+        mx_wl = mx_wl + mx_wl ** 0.5
+        initial_replicas[stage] = math.ceil(mx_wl / tp)
+        
+else:
+    initial_cpus = [MAX_CPU_CORES] * num_stages
+    for i in range(num_stages):
+        tp = 1000 // get_latency(initial_cpus[i], 1, *pipeline_config["stages"][i]["latency_model"])
+        initial_replicas[i] = math.ceil(inferline_base_arrival / tp)
     def get_cost(cpu_list, replica_list):
         c = 0
         for i in range(len(replica_list)):
@@ -112,6 +121,7 @@ elif adapter_type == "il":
         for stage in range(num_stages):
             l = get_latency(cpu_list[stage], batch_list[stage], *pipeline_config["stages"][stage]["latency_model"])
             tp = replica_list[stage] * int(1000 * batch_list[stage] / l)
+            print("hhhhhhhhhhhhhhhh", tp, inferline_base_arrival, replica_list, batch_list, l)
             if tp < inferline_base_arrival:
                 return False
             e2e += l + int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
@@ -119,7 +129,7 @@ elif adapter_type == "il":
             return False
         return True
     
-    initial_cpus = [MAX_CPU_CORES] * num_stages
+    
     actions = ["IB", "RR", "DH"]
     while True:
         best = None
@@ -174,6 +184,7 @@ print(f"{initial_cpus=}")
 print(f"{initial_batches=}")
 print(f"{initial_replicas=}")
 print(f"{inferline_base_arrival=}")
+print(f"max workload={max(workload)}")
 tp_st1 = initial_replicas[0] * int(1000 * initial_batches[0] / get_latency(initial_cpus[0], initial_batches[0], *pipeline_config["stages"][0]["latency_model"]))
 tp_st2 = initial_replicas[1] * int(1000 * initial_batches[1] / get_latency(initial_cpus[1], initial_batches[1], *pipeline_config["stages"][1]["latency_model"]))
 print(f"{tp_st1=} | {tp_st2=}")
@@ -306,7 +317,7 @@ def query_metrics(prom_endpoint, event: Event):
     async def get_metrics(prom: PrometheusClient):
         loop = asyncio.get_event_loop()
         percentiles = {
-            99: None, 98: None, 97: None, 96: None, 95: None, 90: None, 50: None,
+            99: None, 95: None, 90: None, 50: None,
         }
         models = {}
         
@@ -341,8 +352,8 @@ def query_metrics(prom_endpoint, event: Event):
             models["translation_latency"] = loop.run_in_executor(
                 None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(translation_latency_bucket[{2}s])) by (le))')
             )
-            models["summarizer_latency"] = loop.run_in_executor(
-                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(summarizer_latency_bucket[{2}s])) by (le))')
+            models["sentiment_latency"] = loop.run_in_executor(
+                None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(sentiment_latency_bucket[{2}s])) by (le))')
             )
             models["dispatcher_stage2"] = loop.run_in_executor(
                 None, lambda: prom.get_instant(f'histogram_quantile(0.99, sum(rate(dispatcher_stage2_latency_bucket[{2}s])) by (le))')
@@ -374,6 +385,10 @@ def query_metrics(prom_endpoint, event: Event):
             None, lambda: prom.get_instant(f'sum(rate(pelastic_requests_latency_bucket{{le="{SLO / 1000}"}}[2s])) / sum(rate(pelastic_requests_latency_count[2s]))')
         )
         
+        processed_rate = loop.run_in_executor(
+            None, lambda: prom.get_instant(f'sum(rate(pelastic_requests_latency_count[2s]))')
+        )
+        
         drop_rate = loop.run_in_executor(
             None, lambda: prom.get_instant(f"sum(rate(dispatcher_dropped_total[{2}s]))")
         )
@@ -400,6 +415,7 @@ def query_metrics(prom_endpoint, event: Event):
             "rate": _get_value(await rate),
             "total_requests": _get_value(await total_requests),
             "within_slo": _get_value(await within_slo),
+            "processed_rate": _get_value(await processed_rate),
             "drop_rate": _get_value(await drop_rate),
             "drop_total_stage0": _get_value(await drop_total_stage0),
             "drop_total_stage1": _get_value(await drop_total_stage1),
@@ -474,7 +490,7 @@ if __name__ == "__main__":
     
     if pipeline == "video":
         im = cv2.imread(f"./zidane.jpg")
-        im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
+        im = cv2.resize(im, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_LINEAR)
         encoded = base64.b64encode(cv2.imencode(".jpeg",im)[1].tobytes()).decode("utf-8")
     elif pipeline == "sentiment":
         encoded = base64.b64encode(open('./audio.flac', 'rb').read()).decode("utf-8")

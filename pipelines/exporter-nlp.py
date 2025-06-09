@@ -34,9 +34,9 @@ dispatcher_stage2_histogram = Histogram(
     'Dispatcher stage2 latency',
     buckets=DEFAULT_BUCKETS
 )
-summarizer_histogram = Histogram(
-    'summarizer_latency', 
-    'Summarizer latency',
+sentiment_histogram = Histogram(
+    'sentiment_latency', 
+    'Sentiment latency',
     buckets=DEFAULT_BUCKETS
 )
 e2e_histogram = Histogram(
@@ -57,19 +57,19 @@ class Exporter:
         data["dispatcher-stage1"] = round(data["leaving-stage-1"] - data["arrival-stage-1"], 3)
         data["translation-e2e"] = round(data["leaving-Translation"] - data["arrival-Translation"], 3)
         data["dispatcher-stage2"] = round(data["leaving-stage-2"] - data["arrival-stage-2"], 3)
-        data["summarizer-e2e"] = round(data["leaving-Summarizer"] - data["arrival-Summarizer"], 3)
-        data["e2e"] = round(data["leaving-Summarizer"] - data["arrival-stage-0"], 3)
+        data["sentiment-e2e"] = round(data["leaving-SentimentAnalysis"] - data["arrival-SentimentAnalysis"], 3)
+        data["e2e"] = round(data["leaving-SentimentAnalysis"] - data["arrival-stage-0"], 3)
 
         dispatcher_stage0_histogram.observe(data["dispatcher-stage0"])
         identification_histogram.observe(data["identification-e2e"])
         dispatcher_stage1_histogram.observe(data["dispatcher-stage1"])
         translation_histogram.observe(data["translation-e2e"])
         dispatcher_stage2_histogram.observe(data["dispatcher-stage2"])
-        summarizer_histogram.observe(data["summarizer-e2e"])
+        sentiment_histogram.observe(data["sentiment-e2e"])
         e2e_histogram.observe(data["e2e"])
         
-        per_request = {}
-        for k in ["dispatcher-stage0", "identification-e2e", "dispatcher-stage1", "translation-e2e", "dispatcher-stage2", "summarizer-e2e", "e2e"]:
+        per_request = {"data": data["data"]}
+        for k in ["dispatcher-stage0", "identification-e2e", "dispatcher-stage1", "translation-e2e", "dispatcher-stage2", "sentiment-e2e", "e2e"]:
             per_request[k] = data[k]
         per_request["timestamp"] = str(datetime.now())
         self.per_request_list.append(per_request)

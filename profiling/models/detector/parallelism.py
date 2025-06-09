@@ -21,10 +21,13 @@ EXPORTER_PORT = 8082
 SOURCE_NAME = "Detector"
 IMAGE_NAME = "mehransi/main:pelastic-video-detector"
 
+os.system("microk8s kubectl create ns mehran")
 
+
+directory = os.path.dirname(__file__)
 def get_data():
-    im = cv2.imread(f"{sys.argv[1]}")
-    im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
+    im = cv2.imread(f"{directory}/zidane.jpg")
+    im = cv2.resize(im, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_LINEAR)
     return base64.b64encode(cv2.imencode(".jpeg",im)[1].tobytes()).decode("utf-8")
 
 
@@ -35,9 +38,9 @@ def deploy_detector(next_target_endpoint, inter, intra, cpu):
             {
                 "name": f"{POD_NAME}-container",
                 "image": IMAGE_NAME,
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "request_cpu": f"{cpu}",
-                "limit_mem": "1G",
+                "limit_mem": "2G",
                 "limit_cpu": f"{cpu}",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": next_target_endpoint, 
@@ -91,11 +94,11 @@ if __name__ == "__main__":
                 f"http://{pod_ip}:{PORT}/infer", data=json.dumps([{"data": input_data}])
             )
             time.sleep(0.2)
-            for batch in [1, 2, 4, 8]:
+            for batch in [1, 2, 4]:
                 batch_input = []
                 for _ in range(batch):
                     batch_input.append({"data": input_data})
-                for repeat in range(512 // batch + 2 * batch):
+                for repeat in range(128 * 8 + 2 * batch):
                     t = time.perf_counter()
                     response = requests.post(f"http://{pod_ip}:{PORT}/infer", data=json.dumps(batch_input))
                     t = time.perf_counter() - t

@@ -31,9 +31,9 @@ def deploy_translation(next_target_endpoint, i):
             {
                 "name": f"{POD_NAME}-container",
                 "image": IMAGE_NAME,
-                "request_mem": "1G",
+                "request_mem": "2G",
                 "request_cpu": "1",
-                "limit_mem": "1G",
+                "limit_mem": "2G",
                 "limit_cpu": "1",
                 "image_pull_policy": "Always",
                 "env_vars": {"NEXT_TARGET_ENDPOINT": next_target_endpoint, "PORT": f"{PORT}", "PYTHONUNBUFFERED": "1",},

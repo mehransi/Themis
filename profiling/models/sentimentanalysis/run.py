@@ -21,6 +21,8 @@ IMAGE_NAME = "mehransi/main:pelastic-sentiment-analysis"
 
 
 def get_data():
+    # Depending on the pipeline:
+    # return "Hello. I'm an AI."
     return "nor is mister cultar's manner less interesting than his matter"
 
 

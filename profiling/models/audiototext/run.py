@@ -21,9 +21,10 @@ EXPORTER_PORT = 8083
 SOURCE_NAME = "AudioToText"
 IMAGE_NAME = "mehransi/main:pelastic-audio-to-text"
 
+directory = os.path.dirname(__file__)
 
 def get_data():
-    return base64.b64encode(open(f'{sys.argv[1]}', 'rb').read()).decode("utf-8")
+    return base64.b64encode(open(f'{directory}/audio.flac', 'rb').read()).decode("utf-8")
 
 
 def deploy_audio(next_target_endpoint, i):

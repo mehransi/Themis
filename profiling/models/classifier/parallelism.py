@@ -21,10 +21,11 @@ EXPORTER_PORT = 8081
 SOURCE_NAME = "Classifier"
 IMAGE_NAME = "mehransi/main:pelastic-video-classifier"
 
+directory = os.path.dirname(__file__)
 
 def get_data():
-    im = cv2.imread(f"{sys.argv[1]}")
-    im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
+    im = cv2.imread(f"{directory}/ancelotti.jpg")
+    # im = cv2.resize(im, dsize=(256, 256), interpolation=cv2.INTER_CUBIC)
     return base64.b64encode(cv2.imencode(".jpeg",im)[1].tobytes()).decode("utf-8")
 
 
@@ -106,7 +107,7 @@ if __name__ == "__main__":
                     batch_input.append({"data": input_data})
                 repeat = 0
                 data = json.dumps(batch_input)
-                while repeat < 8 * 128 // batch + 2 * batch:
+                while repeat < 8 * 128 + 2 * batch:
                     for r in range(replicas):
                         repeat += 1
                         thread = Thread(target=send, args=(data, pod_ips[r], batch, cpu))
