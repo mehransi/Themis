@@ -1,13 +1,13 @@
 {
-    "SLO": 1350,
+    "SLO": 700,
     "MAX_BATCH_SIZE": 4,
-    "HORIZONTAL_STABILIZATION": "3",
+    "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "language-identification",
             "port": 8000,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "language-identification"},
-            "latency_model": [5.09047221165204, 5.08137830667025, 11.794467994168608, 19.952494502108863],
+            "latency_model": [10.198960632530234, -0.17485138293060007, 13.469590595875898, 6.288354904859383],
             "container_configs": {
                 "name": "language-identification-container",
                 "image": "mehransi/main:pelastic-language-identification",
@@ -26,7 +26,7 @@
             "stage_name": "translation",
             "port": 8000,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "translation"},
-            "latency_model": [57.59805436049355, 130.68228960065525, 8.903791563869234, 3.3794617652943324],
+            "latency_model": [136.47672902324115, 31.94060271850336, -6.738180020281133, 3.1005961247644223],
             "container_configs": {
                 "name": "translation-container",
                 "image": "mehransi/main:pelastic-translation",
@@ -42,15 +42,15 @@
             }
         },
         {
-            "stage_name": "summarizer",
+            "stage_name": "sentiment-analysis",
             "port": 8000,
-            "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "summarizer"},
-            "latency_model": [43.5489028328246, 123.91902983215444, 3.0210123743377855, 8.356729149834319],
+            "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "sentiment-analysis"},
+            "latency_model": [14.087047607935133, 2.3380347321626926, -1.8101831317359833, 1.442639653204678],
             "container_configs": {
-                "name": "summarizer-container",
-                "image": "mehransi/main:pelastic-summarizer",
-                "request_mem": "2G",
-                "limit_mem": "2G",
+                "name": "sentiment-analysis-container",
+                "image": "mehransi/main:pelastic-sentiment-analysis",
+                "request_mem": "1G",
+                "limit_mem": "1G",
                 "env_vars": {
                     "NEXT_TARGET_ENDPOINT": "", 
                     "PORT": "8000",

@@ -1,13 +1,13 @@
 {
-    "SLO": 700,
+    "SLO": 500,
     "MAX_BATCH_SIZE": 4,
-    "HORIZONTAL_STABILIZATION": "3",
+    "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "audio-to-text",
             "port": 8000,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "audio-to-text"},
-            "latency_model": [41.56033472147852, 44.8394643409868, -24.79577847895106, 90.38234174271045],
+            "latency_model": [67.8249419632761, 11.027503901723342, 24.070936392902027, 32.28070452315141],
             "container_configs": {
                 "name": "audio-to-text-container",
                 "image": "mehransi/main:pelastic-audio-to-text",
@@ -27,7 +27,7 @@
             "stage_name": "sentiment-analysis",
             "port": 8000,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "sentiment-analysis"},
-            "latency_model": [7.16068958750918, 13.337867600604142, 4.939652851658362, 1.410890817643068],
+            "latency_model": [15.966355447124066, 2.5183518963351523, -0.8067341513465052, 1.2390206700475155],
             "container_configs": {
                 "name": "sentiment-analysis-container",
                 "image": "mehransi/main:pelastic-sentiment-analysis",
