@@ -3,7 +3,7 @@ from utils import wait_till_pod_is_ready
 import time
 
 namespace = "mehran"
-images = ["mehransi/main:pelastic-video-classifier", "mehransi/main:pelastic-video-detector"]
+images = ["mehransi/main:pelastic-video-classifier", "mehransi/main:pelastic-video-detector", "mehransi/main:pelastic-adapter", "mehransi/main:pelastic-dispatcher"]
 if __name__ == "__main__":
     for image in images:
         name = image.split(":")[1]
@@ -20,6 +20,7 @@ if __name__ == "__main__":
                     "limit_mem": "2G",
                     "request_cpu": 1, 
                     "container_ports": [8000],
+                    "image_pull_policy": "Always",
                     "env_vars": {
                         "NEXT_TARGET_ENDPOINT": "localhost:8000",
                         "PORT": "8000",
