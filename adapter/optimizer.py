@@ -1,8 +1,6 @@
 import math
 import os
 
-TOTAL_CORE = 32
-
 
 def latency(core, batch, alpha, beta, gamma, zeta):
     mlt = float(os.getenv("LATENCY_MODEL_MULTIPLIER", "1"))
@@ -11,7 +9,7 @@ def latency(core, batch, alpha, beta, gamma, zeta):
 
 
 def get_throughput(state: dict, models: dict):
-    current_tp = 10000
+    current_tp = math.inf
     for s in range(len(state)):
         b = state[s][2]
         replicas = state[s][1]
@@ -23,20 +21,20 @@ def get_throughput(state: dict, models: dict):
     return current_tp
 
 
-def horizontal_2d(b_max, slo, models, workload):
+def horizontal_2d(b_max: list, slo, models, workload):
     if workload == 0:
         return {s: [1, 1] for s in range(len(models))}
     dp = []
     best = []
     for i in range(len(models)):
         dp.append([False] * (slo + 1))
-        best.append([(1000, 1000, 1000)] * (slo + 1))
+        best.append([(math.inf, math.inf, math.inf)] * (slo + 1))
     best[0][0] = (0, 0, 0)
     dp[0][0] = True
     for s in range(len(models)):
         for i in range(slo, -1, -1):
             if (s == 0 and dp[s][i]) or s != 0 and dp[s - 1][i]:
-                for b in range(1, b_max + 1):
+                for b in range(1, b_max[s] + 1):
                     curr_latency = latency(1, b, models[s][0], models[s][1], models[s][2], models[s][3])
                     throughput = int(1000 * b / curr_latency)
                     curr_latency += int((b - 1) * 1000 / workload)
@@ -81,21 +79,21 @@ def horizontal_2d(b_max, slo, models, workload):
     return res
 
 
-def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
+def vertical_2d(b_max: list, c_max: list, slo, models, current_instance, workload, depth=1):
     if workload == 0:
         return {s: [1, 1] for s in range(len(models))}, [0] * len(models)
     dp = []
     best = []
     for i in range(len(models)):
         dp.append([False] * (slo + 1))
-        best.append([(1000, 1000, 1000)] * (slo + 1))
+        best.append([(math.inf, math.inf, math.inf)] * (slo + 1))
     best[0][0] = (0, 0, 0)
     dp[0][0] = True
     for s in range(len(models)):
         for i in range(slo, -1, -1):
             if (s == 0 and dp[s][i]) or s != 0 and dp[s - 1][i]:
-                for c in range(1, c_max + 1):
-                    for b in range(1, b_max + 1):
+                for c in range(1, c_max[s] + 1):
+                    for b in range(1, b_max[s] + 1):
                         curr_latency = latency(c, b, models[s][0], models[s][1], models[s][2], models[s][3])
                         throughput = int(1000 * b / curr_latency)
                         curr_latency += int((b - 1) * 1000 / workload)
@@ -112,23 +110,19 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
                                 best[s][i + curr_latency] = (c, c, b)
                         # Not the first model
                         elif dp[s - 1][i] and i > 0:
-                            if TOTAL_CORE < best[s - 1][i][0] + c:
-                                continue
+                            # if TOTAL_CORE < best[s - 1][i][0] + c:
+                            #     continue
                             if dp[s][i + curr_latency] is False:
                                 dp[s][i + curr_latency] = True
                                 best[s][i + curr_latency] = (best[s - 1][i][0] + c, c, b)
                             elif best[s - 1][i][0] + c < best[s][i + curr_latency][0]:
                                 best[s][i + curr_latency] = (best[s - 1][i][0] + c, c, b)
-    least_c = 1000
+    least_c = math.inf
     ind = -1
     for i in range(slo):
-        if dp[len(models) - 1][i]:
-            if ind == -1:
-                ind = i
-                least_c = best[len(models) - 1][i][0]
-            elif best[len(models) - 1][i][0] < least_c:
-                ind = i
-                least_c = best[len(models) - 1][i][0]
+        if dp[len(models) - 1][i] and best[len(models) - 1][i][0] < least_c:
+            ind = i
+            least_c = best[len(models) - 1][i][0]
     res = {}
     if ind == -1:
         if depth != 1:
@@ -143,17 +137,15 @@ def vertical_2d(b_max, c_max, slo, models, current_instance, workload, depth=1):
                 left = mid
         config_vertical_limited, _ = vertical_2d(b_max, c_max, slo, models, current_instance, left)
         wl = workload - left
-        current_extra = {}
-        mehran_list = []
+        extra_list = []
         for x in range(len(models)):
             cl = latency(config_vertical_limited[x][0], config_vertical_limited[x][1],
                          models[x][0], models[x][1], models[x][2], models[x][3])
             th = int(1000 * config_vertical_limited[x][1] / cl)
             cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
             
-            current_extra[x] = [config_vertical_limited[x][0], math.ceil(wl / th), config_vertical_limited[x][1]]
-            mehran_list.append(math.ceil(wl / th))
-        return config_vertical_limited, mehran_list
+            extra_list.append(math.ceil(wl / th))
+        return config_vertical_limited, extra_list
     elif ind != -1 and depth != 1:
         return 0, []
     else:
@@ -174,11 +166,11 @@ if __name__ == "__main__":
     models_set = {0: [57.32741659398668, 9.37504313557346, -0.21007541590491052, -3.6728699710845127],
                 1: [29.94419228390404, 1.6093922724909369, 0.21087515241287602, 2.4765776086144875]}
 
-    current_workload = 30
+    current_workload = 200
     config_current = {0: [1, 1, 1], 1: [1, 1, 1]}
-    config_vertical, extra_instances = vertical_2d(batch_max, core_max, slo_max,
+    config_vertical, extra_instances = vertical_2d([batch_max, batch_max], [core_max, core_max], slo_max,
                                                    models_set, config_current, current_workload)
-    config_horizontal = horizontal_2d(batch_max, slo_max, models_set, current_workload)
+    config_horizontal = horizontal_2d([batch_max, batch_max], slo_max, models_set, current_workload)
     print('Current Config: {MODEL: CORE, INSTANCE, BATCH}')
     print(config_current)
     print('Horizontal Config: {MODEL: [INSTANCE, BATCH]}')

@@ -1,2 +1,3 @@
-workload.txt
+workload*.txt
+
 *.keras

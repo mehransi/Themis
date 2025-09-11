@@ -41,8 +41,8 @@ class Adapter:
         self.container_configs = load_pipeline_data(os.environ["CONTAINER_CONFIGS"])
         for i in range(len(self.container_configs)):
             self.stage_replicas[i] = []
-        self.max_batch_size = int(os.environ["MAX_BATCH_SIZE"])
-        self.max_cores = int(os.environ["MAX_CPU_CORES"])
+        self.max_batch_sizes = load_pipeline_data(os.environ["MAX_BATCH_SIZE"])
+        self.max_cores = load_pipeline_data(os.environ["MAX_CPU_CORES"])
         self.latency_slo = int(os.environ["LATENCY_SLO"])
         self.lstm_model = None
         self.prometheus_session = None
@@ -106,7 +106,7 @@ class Adapter:
         
         no_room_for_vertical = False
         for i in range(len(self.current_state)):
-            if self.current_state[i][0] == self.max_cores:
+            if self.current_state[i][0] == self.max_cores[i]:
                 no_room_for_vertical = True
                 break
         
@@ -116,7 +116,7 @@ class Adapter:
             f"datetime={str(datetime.now())}, {current_rps=}, {current_throughput=}, stabilization_counter={self.horizontal_stabilization_counter}, {should_apply_horizontal=}", 
         )
         if should_apply_horizontal:
-            new_horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
+            new_horizontal_config = horizontal_2d(self.max_batch_sizes, self.latency_slo, self.latency_models, current_rps)
             scaling_in = True
             for i in range(len(new_horizontal_config)):
                 if new_horizontal_config[i][0] > self.current_state[i][1]:
@@ -135,7 +135,11 @@ class Adapter:
             create_tasks = []
             
             t_dp = time.perf_counter()
-            new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
+            new_vertical_config, more_instances = vertical_2d(
+                self.max_batch_sizes, 
+                self.max_cores, 
+                self.latency_slo, self.latency_models, self.current_state, current_rps
+            )
             self.logger.info(
                 f"datetime={str(datetime.now())}, vertical_2d_took={time.perf_counter() - t_dp:.4f}, {current_rps=}"
             )
@@ -231,7 +235,7 @@ class Adapter:
     async def adapt_ho(self):
         starting_time = time.perf_counter()
         current_rps = await self.get_current_rps()
-        horizontal_config = horizontal_2d(self.max_batch_size, self.latency_slo, self.latency_models, current_rps)
+        horizontal_config = horizontal_2d(self.max_batch_sizes, self.latency_slo, self.latency_models, current_rps)
         is_scaling_in = True
         for i in range(len(self.current_state)):
             if self.current_state[i][1] < horizontal_config[i][0]:
@@ -291,7 +295,7 @@ class Adapter:
     async def adapt_vo(self):
         starting_time = time.perf_counter()
         current_rps = await self.get_current_rps()
-        new_vertical_config, more_instances = vertical_2d(self.max_batch_size, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
+        new_vertical_config, more_instances = vertical_2d(self.max_batch_sizes, self.max_cores, self.latency_slo, self.latency_models, self.current_state, current_rps)
         
         is_scaling_down = True
         for i in range(len(self.current_state)):

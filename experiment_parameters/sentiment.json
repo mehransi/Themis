@@ -1,11 +1,12 @@
 {
     "SLO": 500,
-    "MAX_BATCH_SIZE": 4,
     "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "audio-to-text",
             "port": 8000,
+            "max_batch_size": 4,
+            "max_cores": 4,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "audio-to-text"},
             "latency_model": [67.8249419632761, 11.027503901723342, 24.070936392902027, 32.28070452315141],
             "container_configs": {
@@ -27,6 +28,8 @@
             "stage_name": "sentiment-analysis",
             "port": 8000,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "sentiment-analysis"},
+            "max_batch_size": 4,
+            "max_cores": 4,
             "latency_model": [15.966355447124066, 2.5183518963351523, -0.8067341513465052, 1.2390206700475155],
             "container_configs": {
                 "name": "sentiment-analysis-container",

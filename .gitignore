@@ -150,6 +150,7 @@ pyrightconfig.json
 .python-version
 tests/
 workload.txt
+workload2.txt
 series*.csv
 zidane.jpg
 ancelotti.jpg

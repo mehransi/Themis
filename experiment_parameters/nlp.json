@@ -1,11 +1,12 @@
 {
     "SLO": 700,
-    "MAX_BATCH_SIZE": 4,
     "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "language-identification",
             "port": 8000,
+            "max_batch_size": 4,
+            "max_cores": 4,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "language-identification"},
             "latency_model": [10.198960632530234, -0.17485138293060007, 13.469590595875898, 6.288354904859383],
             "container_configs": {
@@ -25,6 +26,8 @@
         {
             "stage_name": "translation",
             "port": 8000,
+            "max_batch_size": 4,
+            "max_cores": 4,
             "pod_labels": {"pipeline": "nlp", "component": "model-server", "stage": "translation"},
             "latency_model": [136.47672902324115, 31.94060271850336, -6.738180020281133, 3.1005961247644223],
             "container_configs": {
@@ -44,6 +47,8 @@
         {
             "stage_name": "sentiment-analysis",
             "port": 8000,
+            "max_batch_size": 4,
+            "max_cores": 4,
             "pod_labels": {"pipeline": "sentiment", "component": "model-server", "stage": "sentiment-analysis"},
             "latency_model": [14.087047607935133, 2.3380347321626926, -1.8101831317359833, 1.442639653204678],
             "container_configs": {

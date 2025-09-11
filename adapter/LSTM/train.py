@@ -109,10 +109,10 @@ def my_train():
 
 def my_test():
     model = saving.load_model(f'{dir}/lstm_binary.keras')
-    with open("workload.txt", "r") as f:
+    with open("workload2.txt", "r") as f:
         workload = f.readlines()
     workload = workload[0].split()
-    workload = list(map(int, workload))
+    workload = list(map(lambda x: int(x) // 8, workload))
     workload = list(filter(lambda x: x != 0, workload))
 
     minute = 60
@@ -121,12 +121,19 @@ def my_test():
     test_idx = 15 * day
 
     # test_data = workload[test_idx:test_idx + 20 * minute]
-    test_data = workload[test_idx:]
+    # test_data = workload[test_idx:]
+    test_data2 = workload[80:20*minute+80]
+    test_data = []
+    for i in range(0, len(test_data2) -2, 2):
+        test_data.append(int((test_data2[i] + test_data2[i+1]) / 2))
 
     test_x, test_y = get_x_y(test_data)
 
     predictions = model.predict(test_x)
     y_pred_classes = (predictions >= BINARY_THRESHOLD).astype(int)
+    print(max(test_data[:120]))
+    # plt.plot(test_data)
+    # plt.show()
     # plt.scatter(list(range(len(test_y))), list(test_y), label="real values")
     # plt.scatter(list(range(len(test_y))), list(y_pred_classes), label="predictions")
     # plt.xlabel("time (minute)")

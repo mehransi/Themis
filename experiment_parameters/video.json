@@ -1,11 +1,12 @@
 {
     "SLO": 300,
-    "MAX_BATCH_SIZE": 4,
     "HORIZONTAL_STABILIZATION": "10",
     "stages": [
         {
             "stage_name": "video-detector",
             "port": 8000,
+            "max_batch_size": 4,
+            "max_cores": 4,
             "pod_labels": {"pipeline": "video", "component": "model-server", "stage": "video-detector"},
             "latency_model": [39.90889958924582, 7.784141716703453, 1.8333345492230113, 0.4507066167132669],
             "container_configs": {
@@ -26,6 +27,8 @@
         {
             "stage_name": "video-classifier",
             "port": 8000,
+            "max_batch_size": 4,
+            "max_cores": 4,
             "pod_labels": {"pipeline": "video", "component": "model-server", "stage": "video-classifier"},
             "latency_model": [28.084275010842124, 2.626952412159743, 6.807172001409088, 0.4588339579256442],
             "container_configs": {
