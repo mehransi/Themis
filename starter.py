@@ -69,7 +69,7 @@ else:
     wl_divider = 2.3
 
 if workload_type == "azure":
-    wl_divider *= 8
+    wl_divider *= 6
 else:    
     wl_divider *= 1.5
 
@@ -77,7 +77,7 @@ else:
 wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
 day = 60 * 60 * 24
 if workload_type == "azure":
-    wl = wl[80:20*60+80]
+    wl = wl[80:20*60+81]
     workload = []
     for i in range(0, len(wl) -2, 2):
         workload.append(int((wl[i] + wl[i+1]) / 2))
@@ -467,6 +467,9 @@ def query_metrics(prom_endpoint, event: Event):
 if __name__ == "__main__":
     os.system(f"microk8s kubectl create ns {namespace}")
     os.system(f"microk8s kubectl create rolebinding default-pod-access --clusterrole=edit --serviceaccount={namespace}:default --namespace={namespace}")
+    os.system(f"microk8s kubectl create clusterrole pod-resizer --verb=patch,update --resource=pods/resize")
+    os.system(f"microk8s kubectl create clusterrolebinding pod-resizer-binding --clusterrole=pod-resizer --serviceaccount={namespace}:default")
+    
     prometheus_port = 32000
     prometheus_container_name = "pelastic_prometheus"
     # os.system(f"microk8s kubectl apply -f podmonitor.yaml")
@@ -543,7 +546,7 @@ if __name__ == "__main__":
     event.set()
     query_task.join()
     utcnow = str(datetime.utcnow().timestamp())
-    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": f"{adapter_type}_{SLO}_{drop_after}"}))
+    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": f"{adapter_type}_{workload_type}_{SLO}_{drop_after}"}))
     os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./{pipeline}_{adapter_type}_{workload_type}_adapter_logs_{utcnow}.log")
     for i in range(len(pipeline_config['stages'])):
         os.system(f"microk8s kubectl logs -n {namespace} deployment/{pipeline_config['stages'][i]['stage_name']}-dispatcher > ./{pipeline}_{adapter_type}_{workload_type}_stage{i}_dispatcher_logs_{utcnow}.log")

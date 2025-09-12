@@ -18,6 +18,15 @@ def wait_till_pod_is_ready(deploy_name: str, namespace: str, ready_replicas=1):
     return
 
 
+def _get_value(prom_res, divide_by=1, should_round=True):
+    for tup in prom_res:
+        if tup[1] != "NaN":
+            v = float(tup[1]) / divide_by
+            if should_round:
+                return round(v, 3)
+            return v
+
+
 class PrometheusClient:
     def __init__(self, endpoint: str):
   
@@ -26,7 +35,7 @@ class PrometheusClient:
     def get_query_url(self, query_type: str):
         return self.__query_url + query_type
 
-    def get_instant(self, query: str, time: float = None):
+    def get_instant(self, query: str, time: float = None, retry = True):
         """
         :param query: PromQL query in string format
         :param time: unix timestamp seconds
@@ -40,9 +49,14 @@ class PrometheusClient:
         if response["status"] != "success":
             raise Exception("Unsuccessful instant query")
         try:
-            return response["data"]["result"]["value"]
+            output = response["data"]["result"]["value"]
         except TypeError:
-            return list(map(lambda r: r["value"], response["data"]["result"]))
+            output = list(map(lambda r: r["value"], response["data"]["result"]))
+        
+        is_empty = not _get_value(output)
+        if is_empty and retry:
+            return self.get_instant(query, time, retry=False)
+        return output
 
     def get_range(self, query: str, start_time: float, end_time: float, step: int):
         """

@@ -48,7 +48,7 @@ class Adapter:
         self.prometheus_session = None
         self.__thread_executor = ThreadPoolExecutor(max_workers=5 * len(self.latency_models))
         self.logger = logging.getLogger()
-        self.logger.setLevel(logging.INFO)
+        logging.basicConfig(level = logging.INFO)
     
     async def initialize(self, data: dict):
         self.lstm_model = saving.load_model(os.environ["LSTM_MODEL"])
