@@ -66,7 +66,8 @@ class ModelServer:
         batch = self.batch_preprocess(batch)
         batch_prep_time = round(time.perf_counter() - t, 3)
         t = time.perf_counter()
-        preds = self.inference(batch)
+        with torch.no_grad():
+            preds = self.inference(batch)
         infer_time = round(time.perf_counter() - t, 3)
         t = time.perf_counter()
         preds = self.convert_batch_result(preds)
