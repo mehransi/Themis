@@ -512,8 +512,31 @@ class Adapter:
                 namespace=self.k8s_namespace
             )
         )
-        if new_cpu > 1:
+        status = await self.check_update_status(pod_info["name"])
+        
+        if status == "PodResizePending":
+            self.logger.info(f"datetime={str(datetime.now())}, pod {pod_info['name']} update deferred")
+            await self.create_pod(stage_idx, new_cpu)
+            await loop.run_in_executor(
+                self.__thread_executor,
+                lambda: delete_pod(pod_info['name'], namespace=self.k8s_namespace)
+            )
+            self.stage_replicas[stage_idx] = list(filter(lambda x: x["name"] != pod_info["name"], self.stage_replicas[stage_idx]))
+            await self.reset_backends(stage_idx, self.stage_replicas[stage_idx])
+        elif new_cpu > 1:
             await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
+        
+        
+    
+    async def check_update_status(self, pod_name, rep=0):
+        response = get_pod(pod_name, namespace=self.k8s_namespace)
+        status = response["conditions"][0]["type"]
+        if status not in ["PodResizeInProgress", "PodResizePending"]:
+            await asyncio.sleep(0.01)
+            if rep < 5:
+                return await self.check_update_status(pod_name, rep+1)
+        return status
+            
 
     async def update_threading(self, pod_endpoint, threads: int):
         async with ClientSession() as session:
