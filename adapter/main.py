@@ -15,7 +15,7 @@ from tensorflow.keras import saving
 from typing import Dict, List
 from kube_resources.pods import create_pod, get_pod, update_pod, delete_pod
 
-from optimizer import horizontal_2d, vertical_2d, latency as get_latency, get_throughput
+from optimizer import horizontal_2d, vertical_2d, latency as get_latency, get_throughput, core_to_G_RAM
 
 
 def load_pipeline_data(d: dict):
@@ -39,8 +39,11 @@ class Adapter:
         self.pod_labels = load_pipeline_data(os.environ["POD_LABELS"])
         self.pod_ports = load_pipeline_data(os.environ["POD_PORTS"])
         self.container_configs = load_pipeline_data(os.environ["CONTAINER_CONFIGS"])
+        self.memory_per_stage_replica = {}
         for i in range(len(self.container_configs)):
             self.stage_replicas[i] = []
+            mem = self.container_configs[i]["request_mem"]
+            self.memory_per_stage_replica[i] = int(mem[:mem.index("G")]) # Fixme: Other units
         self.max_batch_sizes = load_pipeline_data(os.environ["MAX_BATCH_SIZE"])
         self.max_cores = load_pipeline_data(os.environ["MAX_CPU_CORES"])
         self.latency_slo = int(os.environ["LATENCY_SLO"])
@@ -101,7 +104,7 @@ class Adapter:
         current_rps = await self.get_current_rps()
         current_throughput = get_throughput(self.current_state, self.latency_models)
         
-        should_apply_horizontal = not await self.is_wl_increasing_next_10(current_throughput)
+        should_apply_horizontal = is_wl_increasing = not await self.is_wl_increasing_next_10(current_throughput)
         should_apply_horizontal = should_apply_horizontal and (current_rps < current_throughput)
         
         no_room_for_vertical = False
@@ -113,10 +116,17 @@ class Adapter:
         should_apply_horizontal = should_apply_horizontal or no_room_for_vertical
             
         self.logger.info(
-            f"datetime={str(datetime.now())}, {current_rps=}, {current_throughput=}, stabilization_counter={self.horizontal_stabilization_counter}, {should_apply_horizontal=}", 
+            f"datetime={str(datetime.now())}, {current_rps=}, {current_throughput=}, stabilization_counter={self.horizontal_stabilization_counter}, {should_apply_horizontal=}, {is_wl_increasing=}", 
         )
         if should_apply_horizontal:
-            new_horizontal_config = horizontal_2d(self.max_batch_sizes, self.latency_slo, self.latency_models, current_rps)
+            new_horizontal_config = horizontal_2d(
+                self.max_batch_sizes,
+                self.max_cores, 
+                self.latency_slo, 
+                self.latency_models,
+                self.memory_per_stage_replica,
+                current_rps
+            )
             scaling_in = True
             for i in range(len(new_horizontal_config)):
                 if new_horizontal_config[i][0] > self.current_state[i][1]:
@@ -179,27 +189,27 @@ class Adapter:
             new_state = {}
             before_horizontal_apply_time = time.perf_counter()
             for i in range(len(new_horizontal_config)):
-                if self.current_state[i][0] > 1:
+                if self.current_state[i][0] > new_horizontal_config[i][1]:
                     # Add one more instance for stablity
                     new_horizontal_config[i][0] += 1
                     
-                new_state[i] = [1, new_horizontal_config[i][0], new_horizontal_config[i][1]]
+                new_state[i] = [new_horizontal_config[i][1], new_horizontal_config[i][0], new_horizontal_config[i][2]]
                 if new_state[i] == self.current_state[i]:
                     continue
                 
                 if new_horizontal_config[i][0] >= self.current_state[i][1]:
                     for r in self.stage_replicas[i]:
-                        futures.append(self.update_pod(r, i, 1))
+                        futures.append(self.update_pod(r, i, new_horizontal_config[i][1]))
                     for _ in range(new_horizontal_config[i][0] - self.current_state[i][1]):
                         tasks.append(
-                            asyncio.create_task(self.create_pod(i, 1))
+                            asyncio.create_task(self.create_pod(i, new_horizontal_config[i][1]))
                         )
                 else:
                     extra_pods_count = self.current_state[i][1] - new_horizontal_config[i][0]
                     extra_pods = self.stage_replicas[i][:extra_pods_count]
                     self.stage_replicas[i] = self.stage_replicas[i][extra_pods_count:]
                     for r in self.stage_replicas[i]:
-                        tasks.append(asyncio.create_task(self.update_pod(r, i, 1)))
+                        tasks.append(asyncio.create_task(self.update_pod(r, i, new_horizontal_config[i][1])))
                     self.logger.info(f"datetime={str(datetime.now())}, pods_to_delete_stage{i}={json.dumps(extra_pods)}")
                     if extra_pods:
                         await self.reset_backends(i, self.stage_replicas[i])
@@ -235,7 +245,14 @@ class Adapter:
     async def adapt_ho(self):
         starting_time = time.perf_counter()
         current_rps = await self.get_current_rps()
-        horizontal_config = horizontal_2d(self.max_batch_sizes, self.latency_slo, self.latency_models, current_rps)
+        horizontal_config = horizontal_2d(
+            self.max_batch_sizes,
+            [1] * len(self.current_state),
+            self.latency_slo,
+            self.latency_models, 
+            self.memory_per_stage_replica,
+            current_rps
+        )
         is_scaling_in = True
         for i in range(len(self.current_state)):
             if self.current_state[i][1] < horizontal_config[i][0]:
@@ -250,7 +267,7 @@ class Adapter:
         tasks = []
         loop = asyncio.get_event_loop()
         for i in range(len(horizontal_config)):
-            new_state[i] = [1, horizontal_config[i][0], horizontal_config[i][1]]
+            new_state[i] = [1, horizontal_config[i][0], horizontal_config[i][2]]
             self.logger.info(f"datetime={str(datetime.now())}, Prev state {i}={json.dumps(self.current_state[i])} | New state {i}={json.dumps(new_state[i])}")
             if new_state[i] == self.current_state[i]:
                 continue
@@ -585,7 +602,7 @@ async def export_cost(request):
     content += "# TYPE pelastic_cost gauge\n"
     for stage_idx in range(len(adapter.current_state)):
         cpu, replicas, _ = adapter.current_state[stage_idx]
-        content += f'pelastic_cost{{stage="{stage_idx}"}} {cpu*replicas}\n'
+        content += f'pelastic_cost{{stage="{stage_idx}"}} {replicas * (adapter.memory_per_stage_replica[stage_idx] + cpu * core_to_G_RAM)}\n'
     return web.Response(body=content)
 
 

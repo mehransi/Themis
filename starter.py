@@ -37,7 +37,7 @@ workload_type = sys.argv[3]
 assert workload_type in ["twitter", "azure"], "Workload type can be one of {twitter, azure}"
 
 MULTIPLIER_BY_PIPELINE = {"video": 1.15, "sentiment": 1.1, "nlp": 1}
-BATCH_MULTIPLIER_BY_PIPELINE = {"video": 1, "sentiment": 1.1, "nlp": 1}
+BATCH_MULTIPLIER_BY_PIPELINE = {"video": 1.1, "sentiment": 1.1, "nlp": 1}
 LATENCY_MODEL_MULTIPLIER = MULTIPLIER_BY_PIPELINE[pipeline]
 LATENCY_MODEL_BATCH_MULTIPLIER = BATCH_MULTIPLIER_BY_PIPELINE[pipeline]
 BINARY_THRESHOLD = 0.4  # Threshold for LSTM binary classification
@@ -52,7 +52,7 @@ GET_METRICS_INTERVAL = 1
 FIRST_DECIDE_DELAY_MINUTES = 0.5
 
 
-DROP_MULTIPLIER = 1  # zero means no drop
+DROP_MULTIPLIER = 0  # zero means no drop
 
 
 with open(f"experiment_parameters/{pipeline}.json") as f:
@@ -77,7 +77,7 @@ else:
 wl = list(map(lambda x: round(max(1, int(x) / wl_divider)), wl.split()))
 day = 60 * 60 * 24
 if workload_type == "azure":
-    wl = wl[80:20*60+81]
+    wl = wl[80:21*60+80]
     workload = []
     for i in range(0, len(wl) -2, 2):
         workload.append(int((wl[i] + wl[i+1]) / 2))

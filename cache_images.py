@@ -3,7 +3,19 @@ from utils import wait_till_pod_is_ready
 import time
 
 namespace = "mehran"
-images = ["mehransi/main:pelastic-video-classifier", "mehransi/main:pelastic-video-detector", "mehransi/main:pelastic-adapter", "mehransi/main:pelastic-dispatcher"]
+images = [
+    "mehransi/main:pelastic-video-classifier",
+    "mehransi/main:pelastic-video-detector",
+    "mehransi/main:pelastic-audio-to-text",
+    "mehransi/main:pelastic-sentiment-analysis",
+    "mehransi/main:pelastic-language-identification",
+    "mehransi/main:pelastic-summarizer",
+    "mehransi/main:pelastic-translation",
+    "mehransi/main:pelastic-video-detector",
+    "mehransi/main:pelastic-dispatcher"
+    "mehransi/main:pelastic-adapter",
+]
+
 if __name__ == "__main__":
     for image in images:
         name = image.split(":")[1]

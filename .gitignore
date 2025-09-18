@@ -149,8 +149,8 @@ pyrightconfig.json
 
 .python-version
 tests/
-workload.txt
-workload2.txt
+workload*.txt
+_misc/
 series*.csv
 zidane.jpg
 ancelotti.jpg
