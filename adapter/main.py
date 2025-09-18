@@ -121,7 +121,7 @@ class Adapter:
         if should_apply_horizontal:
             new_horizontal_config = horizontal_2d(
                 self.max_batch_sizes,
-                self.max_cores, 
+                [1] * len(self.current_state), 
                 self.latency_slo, 
                 self.latency_models,
                 self.memory_per_stage_replica,
