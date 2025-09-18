@@ -104,8 +104,8 @@ class Adapter:
         current_rps = await self.get_current_rps()
         current_throughput = get_throughput(self.current_state, self.latency_models)
         
-        should_apply_horizontal = is_wl_increasing = not await self.is_wl_increasing_next_10(current_throughput)
-        should_apply_horizontal = should_apply_horizontal and (current_rps < current_throughput)
+        is_wl_increasing = await self.is_wl_increasing_next_10(current_throughput)
+        should_apply_horizontal = not is_wl_increasing and (current_rps < current_throughput)
         
         no_room_for_vertical = False
         for i in range(len(self.current_state)):
@@ -430,7 +430,7 @@ class Adapter:
             response = await response.json()
             self.logger.info(f"datetime={str(datetime.now())}, get_current_rps_took: {time.perf_counter() - t:.3f}")
             rps = float(response["data"]["result"][0]["value"][1])
-            return round(rps + rps ** 0.5)
+            return math.ceil(rps)
     
     async def is_wl_increasing_next_10(self, target: int):
         t = time.perf_counter()
@@ -515,6 +515,7 @@ class Adapter:
 
     async def update_pod(self, pod_info: dict, stage_idx, new_cpu):
         loop = asyncio.get_event_loop()
+        current_cpu = self.current_state[stage_idx][0]
         if new_cpu == 1:
             await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
         await loop.run_in_executor(
@@ -529,10 +530,13 @@ class Adapter:
                 namespace=self.k8s_namespace
             )
         )
+        if new_cpu > 1:
+            await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
         status = await self.check_update_status(pod_info["name"])
         
         if status == "PodResizePending":
             self.logger.info(f"datetime={str(datetime.now())}, pod {pod_info['name']} update deferred")
+            await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", current_cpu)
             await self.create_pod(stage_idx, new_cpu)
             await loop.run_in_executor(
                 self.__thread_executor,
@@ -540,8 +544,6 @@ class Adapter:
             )
             self.stage_replicas[stage_idx] = list(filter(lambda x: x["name"] != pod_info["name"], self.stage_replicas[stage_idx]))
             await self.reset_backends(stage_idx, self.stage_replicas[stage_idx])
-        elif new_cpu > 1:
-            await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
         
         
     
@@ -552,6 +554,7 @@ class Adapter:
             await asyncio.sleep(0.01)
             if rep < 5:
                 return await self.check_update_status(pod_name, rep+1)
+        self.logger.info(f"datetime={str(datetime.now())}, pod {pod_name} update status {status} rep={rep}")
         return status
             
 

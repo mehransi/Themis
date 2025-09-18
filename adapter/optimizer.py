@@ -4,9 +4,10 @@ import os
 core_to_G_RAM = 18
 
 def latency(core, batch, alpha, beta, gamma, zeta):
+    zeta += (alpha + beta + gamma + zeta) / 10
     mlt = float(os.getenv("LATENCY_MODEL_MULTIPLIER", "1"))
     mltb = float(os.getenv("LATENCY_MODEL_BATCH_MULTIPLIER", "1"))
-    return round(mlt * (alpha * batch / core + mltb * (beta * batch) + gamma / core + zeta))
+    return math.ceil(mlt * (alpha * batch / core + mltb * (beta * batch) + gamma / core + math.ceil(zeta)))
 
 
 def get_throughput(state: dict, models: dict):
@@ -44,7 +45,7 @@ def horizontal_2d(b_max: list, c_max: list, slo, models, stage_memory_requests_G
                         if i + curr_latency > slo:
                             continue
                         
-                        needed_instances = math.ceil(workload / throughput)
+                        needed_instances = math.ceil(round(workload + workload ** 0.5) / throughput)
                         cost =  needed_instances * (stage_memory_requests_G[s] + c * core_to_G_RAM)
                         # The first model
                         if s == 0:
@@ -111,7 +112,7 @@ def vertical_2d(b_max: list, c_max: list, slo, models, current_instance, workloa
                         if i + curr_latency > slo:
                             continue
                         
-                        if throughput * current_instance[s][1] < workload:
+                        if throughput * current_instance[s][1] < round(workload + workload ** 0.5):
                             continue
                         # The first model
                         if s == 0:

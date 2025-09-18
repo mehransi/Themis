@@ -36,15 +36,18 @@ assert adapter_type in ["hv", "ho", "vo", "il"], "Adapter type must be one of {h
 workload_type = sys.argv[3]
 assert workload_type in ["twitter", "azure"], "Workload type can be one of {twitter, azure}"
 
-MULTIPLIER_BY_PIPELINE = {"video": 1.15, "sentiment": 1.1, "nlp": 1}
-BATCH_MULTIPLIER_BY_PIPELINE = {"video": 1.1, "sentiment": 1.1, "nlp": 1}
+repetition = sys.argv[4]
+
+MULTIPLIER_BY_PIPELINE = {"video": 1, "sentiment": 1.1, "nlp": 1}
+BATCH_MULTIPLIER_BY_PIPELINE = {"video": 1, "sentiment": 1.1, "nlp": 1}
 LATENCY_MODEL_MULTIPLIER = MULTIPLIER_BY_PIPELINE[pipeline]
 LATENCY_MODEL_BATCH_MULTIPLIER = BATCH_MULTIPLIER_BY_PIPELINE[pipeline]
-BINARY_THRESHOLD = 0.4  # Threshold for LSTM binary classification
+BINARY_THRESHOLD = 0.2  # Threshold for LSTM binary classification
 
 
 def get_latency(core, batch, alpha, beta, gamma, zeta):
-    return round(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + zeta))
+    zeta += (alpha + beta + gamma + zeta) / 10
+    return math.ceil(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + math.ceil(zeta)))
 
 
 namespace = "mehran"
@@ -449,7 +452,7 @@ def query_metrics(prom_endpoint, event: Event):
             break
         time.sleep(GET_METRICS_INTERVAL)
         metrics = asyncio.run(get_metrics(prom))
-        filepath = f"./{pipeline}_{adapter_type}_{workload_type}_{SLO}_{drop_after}_series.csv"
+        filepath = f"./{pipeline}_{adapter_type}_{workload_type}_{SLO}_{drop_after}_series_r{repetition}.csv"
         file_exists = os.path.exists(filepath)
         with open(filepath, "a") as f:
             field_names = [
@@ -546,10 +549,10 @@ if __name__ == "__main__":
     event.set()
     query_task.join()
     utcnow = str(datetime.utcnow().timestamp())
-    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": f"{adapter_type}_{workload_type}_{SLO}_{drop_after}"}))
-    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./{pipeline}_{adapter_type}_{workload_type}_adapter_logs_{utcnow}.log")
+    requests.post(f"http://{EXPORTER_IP}:{EXPORTER_PORT}/save", data=json.dumps({"adapter": f"{adapter_type}_{workload_type}_{SLO}_{drop_after}_r{repetition}"}))
+    os.system(f"microk8s kubectl logs -n {namespace} deployment/{ADAPTER_DEPLOY_NAME} > ./{pipeline}_{adapter_type}_{workload_type}_adapter_logs_r{repetition}_{utcnow}.log")
     for i in range(len(pipeline_config['stages'])):
-        os.system(f"microk8s kubectl logs -n {namespace} deployment/{pipeline_config['stages'][i]['stage_name']}-dispatcher > ./{pipeline}_{adapter_type}_{workload_type}_stage{i}_dispatcher_logs_{utcnow}.log")
+        os.system(f"microk8s kubectl logs -n {namespace} deployment/{pipeline_config['stages'][i]['stage_name']}-dispatcher > ./{pipeline}_{adapter_type}_{workload_type}_stage{i}_dispatcher_logs_r{repetition}_{utcnow}.log")
     os.system(f"microk8s kubectl delete ns {namespace}")
     os.system(f"docker stop {prometheus_container_name}")
     time.sleep(1)

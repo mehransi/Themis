@@ -23,7 +23,7 @@ def signal():
     
 if __name__ == "__main__":
     time.sleep(int(60 * float(os.environ["FIRST_DECIDE_DELAY_MINUTES"])))
-    decision_interval = int(os.environ["DECISION_INTERVAL"])
+    decision_interval = float(os.environ["DECISION_INTERVAL"])
     logger.info(f"Adapter type is {adapter_type}")
     while True:
         thread = Thread(target=signal)
