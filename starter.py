@@ -61,6 +61,9 @@ DROP_MULTIPLIER = 0  # zero means no drop
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
 
+DECISION_INTERVAL = 1
+HORIZONTAL_STABILIZATION_STEPS = round(int(pipeline_config["HORIZONTAL_STABILIZATION"]) / DECISION_INTERVAL)
+
 workload_file = f"workload{2 if workload_type == 'azure' else ''}.txt"
 with open(workload_file) as f:
     wl = f.read()
@@ -267,9 +270,9 @@ def deploy_adapter(next_target_endpoints: dict):
                 "env_vars": {
                     "FIRST_DECIDE_DELAY_MINUTES": f"{FIRST_DECIDE_DELAY_MINUTES}",
                     "ADAPTER_TYPE": adapter_type,
-                    "DECISION_INTERVAL": "1",
+                    "DECISION_INTERVAL": str(DECISION_INTERVAL),
                     "BINARY_THRESHOLD": str(BINARY_THRESHOLD),
-                    "HORIZONTAL_STABILIZATION": pipeline_config["HORIZONTAL_STABILIZATION"],
+                    "HORIZONTAL_STABILIZATION": str(HORIZONTAL_STABILIZATION_STEPS),
                     "VERTICAL_SCALE_DOWN": "false",
                     "K8S_IN_CLUSTER_CLIENT": "true",
                     "PYTHONUNBUFFERED": "1",

@@ -138,7 +138,7 @@ class Adapter:
         self.horizontal_stabilization_counter = 0
         
         loop = asyncio.get_event_loop()
-        
+        pod_status_check_tasks = []
         futures = []
         if should_apply_horizontal is False:
             update_tasks = []
@@ -173,7 +173,7 @@ class Adapter:
                         asyncio.create_task(self.create_pod(i, new_vertical_config[i][0]))
                     )
             t_ = time.perf_counter()
-            await asyncio.gather(*update_tasks)
+            pod_status_check_tasks = await asyncio.gather(*update_tasks)
             update_in_vertical_took = time.perf_counter() - t_
             t_ = time.perf_counter()
             await asyncio.gather(*create_tasks)
@@ -199,7 +199,7 @@ class Adapter:
                 
                 if new_horizontal_config[i][0] >= self.current_state[i][1]:
                     for r in self.stage_replicas[i]:
-                        futures.append(self.update_pod(r, i, new_horizontal_config[i][1]))
+                        futures.append(self.update_pod(r, i, new_horizontal_config[i][1], check_status=False))
                     for _ in range(new_horizontal_config[i][0] - self.current_state[i][1]):
                         tasks.append(
                             asyncio.create_task(self.create_pod(i, new_horizontal_config[i][1]))
@@ -209,7 +209,7 @@ class Adapter:
                     extra_pods = self.stage_replicas[i][:extra_pods_count]
                     self.stage_replicas[i] = self.stage_replicas[i][extra_pods_count:]
                     for r in self.stage_replicas[i]:
-                        tasks.append(asyncio.create_task(self.update_pod(r, i, new_horizontal_config[i][1])))
+                        tasks.append(asyncio.create_task(self.update_pod(r, i, new_horizontal_config[i][1], check_status=False)))
                     self.logger.info(f"datetime={str(datetime.now())}, pods_to_delete_stage{i}={json.dumps(extra_pods)}")
                     if extra_pods:
                         await self.reset_backends(i, self.stage_replicas[i])
@@ -238,6 +238,7 @@ class Adapter:
         self.current_state = new_state
         await asyncio.gather(*update_dispatchers_tasks)
         await asyncio.gather(*[asyncio.create_task(f) for f in futures])
+        await asyncio.gather(*[asyncio.create_task(f) for f in pod_status_check_tasks])
         self.logger.info(f"datetime={str(datetime.now())}, reconfiguration_took {time.perf_counter() - starting_time:.3f}, update_dispatchers_took={time.perf_counter() - before_updating_dispatchers_time:.3f}")
         self.logger.info(f"")
                 
@@ -513,7 +514,7 @@ class Adapter:
             ) as response:
                 return await response.json()
 
-    async def update_pod(self, pod_info: dict, stage_idx, new_cpu):
+    async def update_pod(self, pod_info: dict, stage_idx, new_cpu, check_status=True):
         loop = asyncio.get_event_loop()
         current_cpu = self.current_state[stage_idx][0]
         if new_cpu == 1:
@@ -532,6 +533,12 @@ class Adapter:
         )
         if new_cpu > 1:
             await self.update_threading(f"{pod_info['ip']}:{self.pod_ports[stage_idx]}", new_cpu)
+        
+        if check_status:
+            return self.react_to_update_status(pod_info, stage_idx, current_cpu, new_cpu)
+    
+    async def react_to_update_status(self, pod_info, stage_idx, current_cpu, new_cpu):
+        loop = asyncio.get_event_loop()
         status = await self.check_update_status(pod_info["name"])
         
         if status == "PodResizePending":
@@ -551,7 +558,7 @@ class Adapter:
         response = get_pod(pod_name, namespace=self.k8s_namespace)
         status = response["conditions"][0]["type"]
         if status not in ["PodResizeInProgress", "PodResizePending"]:
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.02)
             if rep < 5:
                 return await self.check_update_status(pod_name, rep+1)
         self.logger.info(f"datetime={str(datetime.now())}, pod {pod_name} update status {status} rep={rep}")
