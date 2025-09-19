@@ -49,6 +49,8 @@ def get_latency(core, batch, alpha, beta, gamma, zeta):
     zeta += (alpha + beta + gamma + zeta) / 10
     return math.ceil(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + math.ceil(zeta)))
 
+def get_queuing(b, workload):
+    return math.ceil((b-1) * (-math.log(0.01, math.e) * 1000) / workload)
 
 namespace = "mehran"
 GET_METRICS_INTERVAL = 1
@@ -116,7 +118,7 @@ elif adapter_type == "vo":
         e2e = 0
         for stage in range(num_stages):
             e2e += get_latency(pipeline_config["stages"][stage]["max_cores"], bc[stage], *pipeline_config["stages"][stage]["latency_model"])
-            e2e += int((bc[stage] - 1) * 1000 / max(workload))
+            e2e += get_queuing(bc[stage], max(workload))
         if e2e <= pipeline_config["SLO"]:
             batch_config = list(bc)
             break
@@ -146,7 +148,7 @@ else:
             print("hhhhhhhhhhhhhhhh", tp, inferline_base_arrival, replica_list, batch_list, l)
             if tp < inferline_base_arrival:
                 return False
-            e2e += l + int((batch_list[stage] - 1) * 1000 / inferline_base_arrival)
+            e2e += l + get_queuing(batch_list[stage], inferline_base_arrival)
         if e2e > SLO:
             return False
         return True

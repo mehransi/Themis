@@ -3,6 +3,8 @@ import os
 
 core_to_G_RAM = 18
 
+std_addition = int(os.getenv("STD_ADDITION", "0"))
+
 def latency(core, batch, alpha, beta, gamma, zeta):
     zeta += (alpha + beta + gamma + zeta) / 10
     mlt = float(os.getenv("LATENCY_MODEL_MULTIPLIER", "1"))
@@ -22,6 +24,9 @@ def get_throughput(state: dict, models: dict):
             current_tp = tp
     return current_tp
 
+def get_queuing(b, workload):
+    return math.ceil((b-1) * (-math.log(0.01, math.e) * 1000) / workload)
+
 
 def horizontal_2d(b_max: list, c_max: list, slo, models, stage_memory_requests_G, workload):
     if workload == 0:
@@ -40,12 +45,12 @@ def horizontal_2d(b_max: list, c_max: list, slo, models, stage_memory_requests_G
                     for b in range(1, b_max[s] + 1):
                         curr_latency = latency(c, b, models[s][0], models[s][1], models[s][2], models[s][3])
                         throughput = int(1000 * b / curr_latency)
-                        curr_latency += int((b - 1) * 1000 / workload)
+                        curr_latency += get_queuing(b, workload)
                         
                         if i + curr_latency > slo:
                             continue
                         
-                        needed_instances = math.ceil(round(workload + workload ** 0.5) / throughput)
+                        needed_instances = math.ceil(round(workload +  std_addition * (workload ** 0.5)) / throughput)
                         cost =  needed_instances * (stage_memory_requests_G[s] + c * core_to_G_RAM)
                         # The first model
                         if s == 0:
@@ -85,7 +90,8 @@ def horizontal_2d(b_max: list, c_max: list, slo, models, stage_memory_requests_G
                     models[stage][1],
                     models[stage][2],
                     models[stage][3]
-                ) + int((best[stage][ind][3] - 1) * 1000 / workload))
+                ) + get_queuing(best[stage][ind][3], workload)
+            )
             stage -= 1
     return res
 
@@ -107,12 +113,12 @@ def vertical_2d(b_max: list, c_max: list, slo, models, current_instance, workloa
                     for b in range(1, b_max[s] + 1):
                         curr_latency = latency(c, b, models[s][0], models[s][1], models[s][2], models[s][3])
                         throughput = int(1000 * b / curr_latency)
-                        curr_latency += int((b - 1) * 1000 / workload)
+                        curr_latency += get_queuing(b, workload)
                         
                         if i + curr_latency > slo:
                             continue
                         
-                        if throughput * current_instance[s][1] < round(workload + workload ** 0.5):
+                        if throughput * current_instance[s][1] < round(workload + std_addition * (workload ** 0.5)):
                             continue
                         # The first model
                         if s == 0:
@@ -153,7 +159,7 @@ def vertical_2d(b_max: list, c_max: list, slo, models, current_instance, workloa
             cl = latency(config_vertical_limited[x][0], config_vertical_limited[x][1],
                          models[x][0], models[x][1], models[x][2], models[x][3])
             th = int(1000 * config_vertical_limited[x][1] / cl)
-            cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
+            # cl += int((config_vertical_limited[x][1] - 1) * 1000 / wl)
             
             extra_list.append(math.ceil(wl / th))
         return config_vertical_limited, extra_list
@@ -165,7 +171,7 @@ def vertical_2d(b_max: list, c_max: list, slo, models, current_instance, workloa
             res[counter] = [best[counter][ind][1], best[counter][ind][2]]
             ind -= (latency(best[counter][ind][1], best[counter][ind][2], models[counter][0], models[counter][1],
                             models[counter][2], models[counter][3])
-                    + int((best[counter][ind][2] - 1) * 1000 / workload))
+                    + get_queuing(best[counter][ind][2], workload))
             counter -= 1
     return res, [0] * len(models)
 
