@@ -422,16 +422,21 @@ class Adapter:
     
     async def get_current_rps(self):
         t = time.perf_counter()
-        async with self.prometheus_session.post(
-            f"/api/v1/query",
-            params={
-                "query": 'rate(dispatcher_requests_total{stage="stage-0"}[2s])',
-            }
-        ) as response:
-            response = await response.json()
-            self.logger.info(f"datetime={str(datetime.now())}, get_current_rps_took: {time.perf_counter() - t:.3f}")
-            rps = float(response["data"]["result"][0]["value"][1])
-            return math.ceil(rps)
+        
+        current_rps = await self.get_rps_history(5)
+        current_rps = max(current_rps)
+        
+        return math.ceil(current_rps)
+        # async with self.prometheus_session.post(
+        #     f"/api/v1/query",
+        #     params={
+        #         "query": 'rate(dispatcher_requests_total{stage="stage-0"}[2s])',
+        #     }
+        # ) as response:
+        #     response = await response.json()
+        #     self.logger.info(f"datetime={str(datetime.now())}, get_current_rps_took: {time.perf_counter() - t:.3f}")
+        #     rps = float(response["data"]["result"][0]["value"][1])
+        #     return math.ceil(rps)
     
     async def is_wl_increasing_next_10(self, target: int):
         t = time.perf_counter()
