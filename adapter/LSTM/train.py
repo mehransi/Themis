@@ -12,7 +12,7 @@ history_seconds = 60
 next_prediction_period = 10
 input_shape = history_seconds // next_prediction_period
 
-BINARY_THRESHOLD = 0.4
+BINARY_THRESHOLD = 0.2
 
 dir = os.path.dirname(__file__)
 
@@ -109,24 +109,16 @@ def my_train():
 
 def my_test():
     model = saving.load_model(f'{dir}/lstm_binary.keras')
-    with open("workload2.txt", "r") as f:
-        workload = f.readlines()
-    workload = workload[0].split()
-    workload = list(map(lambda x: int(x) // 8, workload))
-    workload = list(filter(lambda x: x != 0, workload))
-
-    minute = 60
-    hour = 60 * 60
-    day = hour * 24
-    test_idx = 15 * day
+    with open("workload.txt", "r") as f:
+        wl = f.read()
+    wl = list(map(lambda x: round(max(1, int(x) / 1.5)), wl.split()))
 
     # test_data = workload[test_idx:test_idx + 20 * minute]
     # test_data = workload[test_idx:]
-    test_data2 = workload[80:20*minute+80]
-    test_data = []
-    for i in range(0, len(test_data2) -2, 2):
-        test_data.append(int((test_data2[i] + test_data2[i+1]) / 2))
-
+    hour = 60 * 60
+    day = hour * 24
+     
+    test_data = wl[15 * day + 84 * 60 + 450: 15 * day + 95 * 60 + 450]
     test_x, test_y = get_x_y(test_data)
 
     predictions = model.predict(test_x)

@@ -1,5 +1,6 @@
 import math
 import os
+from scipy.stats import gamma
 
 core_to_G_RAM = 18
 
@@ -25,7 +26,17 @@ def get_throughput(state: dict, models: dict):
     return current_tp
 
 def get_queuing(b, workload):
-    return math.ceil((b-1) * (-math.log(0.01, math.e) * 1000) / workload)
+    if b == 1:
+        return 0
+    queueing_dist = os.getenv("QUEUEING_DIST", "gamma")
+    if queueing_dist == "gamma":
+        return math.ceil(1000 * gamma.ppf(0.99, a=b-1, scale=1/workload))
+    elif queueing_dist == "exponential":
+        return math.ceil((b-1) * (-math.log(0.01, math.e) * 1000) / workload)
+    elif queueing_dist == "constant":
+        return math.ceil((b-1) / workload)
+    else:
+        raise Exception("Invalid distribution")
 
 
 def horizontal_2d(b_max: list, c_max: list, slo, models, stage_memory_requests_G, workload):

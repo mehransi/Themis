@@ -9,6 +9,7 @@ RUN pip install --upgrade pip
 RUN pip install tensorflow==2.16.1
 RUN pip install keras==3.11.0
 RUN pip install aiohttp==3.9.5
+RUN pip install scipy==1.13.0
 RUN pip install git+https://github.com/reconfigurable-ml-pipeline/kubernetes-python-client.git
 
 COPY LSTM/lstm_binary.keras /app/lstm.keras

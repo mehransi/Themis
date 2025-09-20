@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import itertools
+from scipy.stats import gamma
 
 from barazmoon import BarAzmoon
 from datetime import datetime
@@ -43,14 +44,25 @@ BATCH_MULTIPLIER_BY_PIPELINE = {"video": 1, "sentiment": 1.1, "nlp": 1}
 LATENCY_MODEL_MULTIPLIER = MULTIPLIER_BY_PIPELINE[pipeline]
 LATENCY_MODEL_BATCH_MULTIPLIER = BATCH_MULTIPLIER_BY_PIPELINE[pipeline]
 BINARY_THRESHOLD = 0.2  # Threshold for LSTM binary classification
-
+STD_ADDITION = 1
+QUEUEING_DIST = "exponential"
 
 def get_latency(core, batch, alpha, beta, gamma, zeta):
     zeta += (alpha + beta + gamma + zeta) / 10
     return math.ceil(LATENCY_MODEL_MULTIPLIER * (alpha * batch / core + LATENCY_MODEL_BATCH_MULTIPLIER * (beta * batch) + gamma / core + math.ceil(zeta)))
 
-def get_queuing(b, workload):
-    return math.ceil((b-1) * (-math.log(0.01, math.e) * 1000) / workload)
+def get_queuing(b, workload, quantile=0.99):
+    if b == 1:
+        return 0
+    queueing_dist = QUEUEING_DIST
+    if queueing_dist == "gamma":
+        return math.ceil(1000 * gamma.ppf(quantile, a=b-1, scale=1/workload))
+    elif queueing_dist == "exponential":
+        return math.ceil((b-1) * (-math.log(1-quantile, math.e) * 1000) / workload)
+    elif queueing_dist == "constant":
+        return math.ceil((b-1) / workload)
+    else:
+        raise Exception("Invalid distribution")
 
 namespace = "mehran"
 GET_METRICS_INTERVAL = 1
@@ -63,7 +75,7 @@ DROP_MULTIPLIER = 0  # zero means no drop
 with open(f"experiment_parameters/{pipeline}.json") as f:
     pipeline_config = json.load(f)
 
-DECISION_INTERVAL = 1
+DECISION_INTERVAL = 0.5
 HORIZONTAL_STABILIZATION_STEPS = round(int(pipeline_config["HORIZONTAL_STABILIZATION"]) / DECISION_INTERVAL)
 
 workload_file = f"workload{2 if workload_type == 'azure' else ''}.txt"
@@ -126,7 +138,7 @@ elif adapter_type == "vo":
         l = get_latency(pipeline_config["stages"][stage]["max_cores"], batch_config[stage], *pipeline_config["stages"][stage]["latency_model"])
         tp = batch_config[stage] * 1000 // l
         mx_wl = max(workload)
-        mx_wl = mx_wl + mx_wl ** 0.5
+        mx_wl = mx_wl + STD_ADDITION * (mx_wl ** 0.5)
         initial_replicas[stage] = math.ceil(mx_wl / tp)
         
 else:
@@ -148,7 +160,7 @@ else:
             print("hhhhhhhhhhhhhhhh", tp, inferline_base_arrival, replica_list, batch_list, l)
             if tp < inferline_base_arrival:
                 return False
-            e2e += l + get_queuing(batch_list[stage], inferline_base_arrival)
+            e2e += l + get_queuing(batch_list[stage], inferline_base_arrival, quantile=0.9)
         if e2e > SLO:
             return False
         return True
@@ -274,6 +286,8 @@ def deploy_adapter(next_target_endpoints: dict):
                     "ADAPTER_TYPE": adapter_type,
                     "DECISION_INTERVAL": str(DECISION_INTERVAL),
                     "BINARY_THRESHOLD": str(BINARY_THRESHOLD),
+                    "STD_ADDITION": str(STD_ADDITION),
+                    "QUEUEING_DIST": str(QUEUEING_DIST),
                     "HORIZONTAL_STABILIZATION": str(HORIZONTAL_STABILIZATION_STEPS),
                     "VERTICAL_SCALE_DOWN": "false",
                     "K8S_IN_CLUSTER_CLIENT": "true",
